@@ -33,6 +33,10 @@ export class CompanionAuthError extends Error {
   }
 }
 
+/** Every companion/broker request is bounded — a hung server must never
+ * stall the runtime loop or block the poller forever. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function postJson(
   url: string,
   body: unknown,
@@ -41,6 +45,7 @@ async function postJson(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   let json: unknown = null;
   try {
@@ -143,6 +148,7 @@ async function broker<T>(
         "x-gemaclaw-lease": task.leaseToken,
         ...init?.headers,
       },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     },
   );
   if (!res.ok) {
@@ -174,11 +180,19 @@ export async function completeTask(
   ok: boolean,
   trace?: Array<{ action: string; note: string }>,
 ): Promise<boolean> {
-  try {
-    await brokerPost(task, "/complete", { summary, ok, trace });
-    return true;
-  } catch (err) {
-    console.error(`[gemaclaw] complete failed for ${task.actionId}:`, err);
-    return false;
+  // Bounded idempotent retries: a transient blip must not leave the card
+  // on "Running…" until the server watchdog when the work already landed.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await brokerPost(task, "/complete", { summary, ok, trace });
+      return true;
+    } catch (err) {
+      console.error(
+        `[gemaclaw] complete attempt ${attempt}/3 failed for ${task.actionId}:`,
+        err,
+      );
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2_000));
+    }
   }
+  return false;
 }

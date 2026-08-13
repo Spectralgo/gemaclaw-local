@@ -79,14 +79,22 @@ export interface TaskRunnerDeps {
 function fileLogger(actionId: string): (event: Record<string, unknown>) => void {
   const dir = path.join(configDir(), "logs");
   try {
-    fs.mkdirSync(dir, { recursive: true });
+    // Logs carry household prompts and model output — keep them private,
+    // like the config file.
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   } catch {
     return () => {};
   }
-  const file = path.join(dir, `${actionId}.jsonl`);
+  // The id is server-supplied — never let it shape the path.
+  const safeName = actionId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+  const file = path.join(dir, `${safeName}.jsonl`);
   return (event) => {
     try {
-      fs.appendFileSync(file, `${JSON.stringify({ at: Date.now(), ...event })}\n`);
+      fs.appendFileSync(
+        file,
+        `${JSON.stringify({ at: Date.now(), ...event })}\n`,
+        { mode: 0o600 },
+      );
     } catch {
       // Logging must never take the task down.
     }

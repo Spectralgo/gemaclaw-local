@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  isAllowedServerUrl,
   loadConfig,
   resolveModel,
   saveConfig,
@@ -62,5 +63,15 @@ describe("GemaClaw Local config", () => {
 
     expect(resolveModel(config)).toBe("claude-sonnet-4-6");
     expect(resolveModel({ ...config, model: "claude-opus-4-6" })).toBe("claude-opus-4-6");
+  });
+
+  it("requires https except for loopback dev servers", () => {
+    expect(isAllowedServerUrl("https://gema.spectralgo.com")).toBe(true);
+    expect(isAllowedServerUrl("http://localhost:3003")).toBe(true);
+    expect(isAllowedServerUrl("http://127.0.0.1:3003")).toBe(true);
+    expect(isAllowedServerUrl("http://gema.spectralgo.com")).toBe(false);
+    expect(isAllowedServerUrl("http://192.168.1.10:3003")).toBe(false);
+    expect(isAllowedServerUrl("ftp://gema.example")).toBe(false);
+    expect(isAllowedServerUrl("not a url")).toBe(false);
   });
 });

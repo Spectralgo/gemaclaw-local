@@ -4,6 +4,7 @@ import {
   configPath,
   DEFAULT_MODELS,
   type GemaLocalConfig,
+  isAllowedServerUrl,
   type RuntimeName,
   saveConfig,
 } from "../server/config.js";
@@ -26,7 +27,8 @@ async function main(): Promise<void> {
         message: "Gema server URL",
         initial: "https://gema.spectralgo.com",
         validate: (value: string) =>
-          /^https?:\/\//.test(value.trim()) || "Enter a full http(s) URL",
+          isAllowedServerUrl(value.trim().replace(/\/+$/, "")) ||
+          "Use an https:// URL (plain http is only allowed for localhost)",
       },
       {
         type: "text",

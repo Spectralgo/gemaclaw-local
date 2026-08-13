@@ -40,11 +40,32 @@ export function loadConfig(): GemaLocalConfig {
   }
 
   const serverUrl = value.serverUrl.replace(/\/+$/, "");
-  if (!serverUrl) {
+  if (!serverUrl || !isAllowedServerUrl(serverUrl)) {
     throw configError(filePath);
   }
 
   return { ...value, serverUrl };
+}
+
+/**
+ * The pairing code and the long-lived companion token ride every request:
+ * require HTTPS, with plain HTTP allowed only for explicit loopback dev.
+ */
+export function isAllowedServerUrl(serverUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(serverUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol === "https:") return true;
+  if (url.protocol !== "http:") return false;
+  return (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1" ||
+    url.hostname === "[::1]"
+  );
 }
 
 export function saveConfig(config: GemaLocalConfig): void {

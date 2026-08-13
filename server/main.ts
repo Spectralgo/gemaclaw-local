@@ -42,13 +42,20 @@ async function main(): Promise<void> {
       backoff = POLL_INTERVAL_MS;
       authFailures = 0;
       const next = tasks.find((task) => !ran.has(task.actionId));
-      if (next) {
+      if (next && !stopping) {
         console.log(
           `[gemaclaw] task ${next.actionId}: "${next.prompt.slice(0, 80)}"`,
         );
         const claimed = await claimTask(config, next.actionId);
         if (!claimed) {
+          // Lost race (or already claimed) — never poll-spin on the same
+          // id while newer tasks wait behind it.
+          ran.add(next.actionId);
           console.log("[gemaclaw] another runner claimed it first");
+        } else if (stopping) {
+          console.log(
+            "[gemaclaw] shutdown requested — leaving the claimed task to the server watchdog",
+          );
         } else {
           ran.add(claimed.actionId);
           const startedAt = Date.now();
@@ -61,12 +68,14 @@ async function main(): Promise<void> {
     } catch (err) {
       if (err instanceof CompanionAuthError) {
         // A server restart can briefly reject valid tokens — only give up
-        // after several consecutive rejections.
+        // after several CONSECUTIVE rejections.
         authFailures += 1;
         if (authFailures >= 3) {
           console.error(`\n${err.message}\n`);
           process.exit(1);
         }
+      } else {
+        authFailures = 0;
       }
       console.error(`[gemaclaw] poll failed (retrying in ${backoff / 1000}s):`, err);
       await sleep(backoff);
