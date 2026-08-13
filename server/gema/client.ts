@@ -84,7 +84,8 @@ export async function pollTasks(
     `${config.serverUrl}/gemaclaw/companion/poll`,
     { token: config.companionToken },
   );
-  if (status === 403 || status === 404) throw new CompanionAuthError();
+  if (status === 403) throw new CompanionAuthError();
+  // 404 = flag off or server mid-restart — transient, not an auth verdict.
   if (status !== 200) throw new Error(`poll failed with HTTP ${status}`);
   const tasks = (json as { tasks?: unknown } | null)?.tasks;
   return Array.isArray(tasks) ? (tasks as PendingTask[]) : [];
@@ -100,7 +101,7 @@ export async function claimTask(
     { token: config.companionToken, actionId },
   );
   if (status === 409) return null;
-  if (status === 403 || status === 404) throw new CompanionAuthError();
+  if (status === 403) throw new CompanionAuthError();
   if (status !== 200) throw new Error(`claim failed with HTTP ${status}`);
   const claimed = json as {
     actionId?: unknown;

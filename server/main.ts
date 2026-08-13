@@ -28,6 +28,7 @@ async function main(): Promise<void> {
 
   const ran = new Set<string>();
   let backoff = POLL_INTERVAL_MS;
+  let authFailures = 0;
   let stopping = false;
   process.on("SIGINT", () => {
     if (stopping) process.exit(130);
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
     try {
       const tasks = await pollTasks(config);
       backoff = POLL_INTERVAL_MS;
+      authFailures = 0;
       const next = tasks.find((task) => !ran.has(task.actionId));
       if (next) {
         console.log(
@@ -58,8 +60,13 @@ async function main(): Promise<void> {
       }
     } catch (err) {
       if (err instanceof CompanionAuthError) {
-        console.error(`\n${err.message}\n`);
-        process.exit(1);
+        // A server restart can briefly reject valid tokens — only give up
+        // after several consecutive rejections.
+        authFailures += 1;
+        if (authFailures >= 3) {
+          console.error(`\n${err.message}\n`);
+          process.exit(1);
+        }
       }
       console.error(`[gemaclaw] poll failed (retrying in ${backoff / 1000}s):`, err);
       await sleep(backoff);

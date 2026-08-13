@@ -65,6 +65,15 @@ describe("pollTasks", () => {
     });
     await expect(pollTasks(config)).rejects.toBeInstanceOf(CompanionAuthError);
   });
+
+  it("treats 404 (flag off / server restarting) as transient, not auth", async () => {
+    server.respond("POST", "/gemaclaw/companion/poll", 404, {
+      error: "not found",
+    });
+    const err = await pollTasks(config).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(CompanionAuthError);
+  });
 });
 
 describe("claimTask", () => {
