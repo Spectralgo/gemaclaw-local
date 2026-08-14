@@ -15,11 +15,20 @@ Gema server ──(poll/claim, companion token)──► this companion, on your
               brain: YOUR Claude/Codex subscription
 ```
 
+## Talk to Gema from your messenger
+
+- **Telegram (recommended)**: a dedicated bot — every DM is an ask, `deep:` files tasks. No webhook, long-polling only.
+- **WhatsApp**: link your own account (QR); `@gema …` in your self-chat, allowlisted numbers welcome.
+
+Both run the same four abilities on your subscription: grounded answers, approval-gated grocery proposals, household-chat notes, and deep-task filing. See the [tutorial](TUTORIAL.md).
+
 ## Why
 
 - **Smarter deep tasks** — your subscription's frontier model instead of the hosted default brain.
 - **Your data stays governed** — the companion has exactly the sandbox contract: broad reads, narrow approval-gated writes, no deletes, a hard per-task call budget, and a kill switch in the household settings. The model runs locally, but it can't do anything a hosted GemaClaw couldn't.
 - **Your credential never leaves** — the Claude/Codex login stays on your machine; only tool traffic crosses the wire.
+
+**New here? The [complete illustrated tutorial](TUTORIAL.md) walks through everything — pairing, deep tasks, Telegram, and WhatsApp.**
 
 ## Setup
 
