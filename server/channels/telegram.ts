@@ -119,6 +119,13 @@ export class TelegramTransport implements ChannelTransport {
     await this.call("sendMessage", { chat_id: Number(chatId), text });
   }
 
+  async typing(chatId: string): Promise<void> {
+    await this.call("sendChatAction", {
+      chat_id: Number(chatId),
+      action: "typing",
+    }).catch(() => undefined);
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     this.abort.abort();

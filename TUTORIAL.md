@@ -84,7 +84,7 @@ Both channels drive the same abilities:
 | *"add whatever's missing for shakshuka"* | proposes items → **approval card** in the app (never a direct write) |
 | *"tick off the milk"* | proposes completions → approval card |
 | *"tell the household I'll cook on Friday"* | posts a note to the household chat as Gema |
-| `deep: plan the weekend meals` | files a **Deep task** card; after in-app approval your companion runs it |
+| `deep: plan the weekend meals` | files a **Deep task** card; after in-app approval your companion runs it **and reports the result back in the same chat** |
 
 A real exchange from the proof run (Telegram):
 
@@ -133,6 +133,8 @@ WhatsApp links the companion to **your own account** as a linked device — exac
 
 > `@gema what's still open on the list?`
 > `@gema deep: plan next week's dinners`
+
+While Gema thinks you'll see a typing indicator; when a `deep:` task you filed finishes, its wrap-up arrives back in the same chat.
 
 **Why the prefix?** This is your real account — Gema must never hijack a human conversation. Only messages starting with `@gema` / `gema:` / `deep:` get answered; everything else is ignored. Group chats are always ignored.
 

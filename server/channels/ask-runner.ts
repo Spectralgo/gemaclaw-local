@@ -146,20 +146,33 @@ export interface AskRunnerDeps {
   hardGraceMs?: number;
 }
 
+export interface ChannelAskResult {
+  reply: string;
+  /** Set when a deep task was filed — the router uses it to report the
+   * wrap-up back into this chat once the task completes. */
+  deepActionId?: string;
+}
+
 /** Run one channel ask on the configured subscription runtime and return
- * the reply text. Never throws — errors become an apologetic reply. */
+ * the reply. Never throws — errors become an apologetic reply. */
 export async function runChannelAsk(
   config: GemaLocalConfig,
   trigger: ParsedTrigger,
   deps: AskRunnerDeps = {},
-): Promise<string> {
+): Promise<ChannelAskResult> {
   if (trigger.kind === "deep") {
     try {
-      await fileDeepTask(config, trigger.prompt.slice(0, 500));
-      return DEEP_FILED_REPLY;
+      const { actionId } = await fileDeepTask(
+        config,
+        trigger.prompt.slice(0, 500),
+      );
+      return { reply: DEEP_FILED_REPLY, deepActionId: actionId };
     } catch (err) {
       console.error("[channels] deep task filing failed:", err);
-      return "I couldn't file that deep task just now — try again in a moment.";
+      return {
+        reply:
+          "I couldn't file that deep task just now — try again in a moment.",
+      };
     }
   }
 
@@ -208,15 +221,19 @@ export async function runChannelAsk(
       }),
     ]);
     const reply = result.text.trim();
-    if (reply.length > 0) return reply;
-    return used.proposed
-      ? "Suggestion sent — there's an approval card waiting in the app."
-      : "I looked, but I don't have a useful answer for that one.";
+    if (reply.length > 0) return { reply };
+    return {
+      reply: used.proposed
+        ? "Suggestion sent — there's an approval card waiting in the app."
+        : "I looked, but I don't have a useful answer for that one.",
+    };
   } catch (err) {
     console.error("[channels] ask failed:", err);
-    return abortController.signal.aborted
-      ? "That one took me too long — try asking a smaller piece of it."
-      : "Something went wrong on my side — try again in a moment.";
+    return {
+      reply: abortController.signal.aborted
+        ? "That one took me too long — try asking a smaller piece of it."
+        : "Something went wrong on my side — try again in a moment.",
+    };
   } finally {
     clearTimeout(watchdog);
   }

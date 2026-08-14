@@ -134,7 +134,7 @@ describe("ChannelRouter", () => {
       config({ channels: { telegram: { botToken: "t" } } }),
       [transport],
       {
-        runAsk: async () => "Here's the list.",
+        runAsk: async () => ({ reply: "Here's the list." }),
         onTelegramOwnerBound: (id) => bound.push(id),
       },
     );
@@ -161,7 +161,7 @@ describe("ChannelRouter", () => {
               release = r;
             });
           }
-          return `answer:${trigger.prompt}`;
+          return { reply: `answer:${trigger.prompt}` };
         },
       },
     );
@@ -175,6 +175,32 @@ describe("ChannelRouter", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(asked).toEqual(["one", "three"]);
     expect(transport.sent).toEqual(["answer:one", "answer:three"]);
+  });
+
+  it("reports a filed deep task's wrap-up back to the filing chat", async () => {
+    const transport = fakeTransport();
+    const router = new ChannelRouter(
+      config({ channels: { telegram: { botToken: "t", allowFrom: ["42"] } } }),
+      [transport],
+      {
+        runAsk: async () => ({
+          reply: "Filed — approve in the app.",
+          deepActionId: "task-77",
+        }),
+      },
+    );
+    await router.onMessage(transport, tgMessage("deep: plan the week"));
+    expect(transport.sent).toEqual(["Filed — approve in the app."]);
+
+    await router.notifyTaskDone("task-77", {
+      summary: "Two dinners planned.",
+      ok: true,
+    });
+    expect(transport.sent[1]).toBe("Done — Two dinners planned.");
+    // Unknown ids and repeats are silent no-ops.
+    await router.notifyTaskDone("task-77", { summary: "again", ok: true });
+    await router.notifyTaskDone("nope", { summary: "x", ok: false });
+    expect(transport.sent).toHaveLength(2);
   });
 });
 
@@ -203,11 +229,12 @@ describe("runChannelAsk", () => {
       ok: true,
       actionId: "task-1",
     });
-    const reply = await runChannelAsk(cfg, {
+    const result = await runChannelAsk(cfg, {
       kind: "deep",
       prompt: "plan the week",
     });
-    expect(reply).toBe(DEEP_FILED_REPLY);
+    expect(result.reply).toBe(DEEP_FILED_REPLY);
+    expect(result.deepActionId).toBe("task-1");
     expect(server.requests[0]?.body).toMatchObject({
       token: "tok",
       prompt: "plan the week",
@@ -230,12 +257,12 @@ describe("runChannelAsk", () => {
       expect(result?.text).toContain("Milk");
       return "Milk is already on the list.";
     });
-    const reply = await runChannelAsk(
+    const result = await runChannelAsk(
       cfg,
       { kind: "ask", prompt: "do we need milk?" },
       { runRuntime },
     );
-    expect(reply).toBe("Milk is already on the list.");
+    expect(result.reply).toBe("Milk is already on the list.");
   });
 
   it("falls back to a friendly line when the runtime returns nothing after proposing", async () => {
@@ -248,34 +275,34 @@ describe("runChannelAsk", () => {
       await propose?.handle({ items: [{ name: "Eggs" }] });
       return "";
     });
-    const reply = await runChannelAsk(
+    const result = await runChannelAsk(
       cfg,
       { kind: "ask", prompt: "add eggs" },
       { runRuntime },
     );
-    expect(reply).toContain("approval card");
+    expect(result.reply).toContain("approval card");
   });
 
   it("never throws — a runtime explosion becomes an apologetic reply", async () => {
     const runRuntime = fakeRuntime(async () => {
       throw new Error("boom");
     });
-    const reply = await runChannelAsk(
+    const result = await runChannelAsk(
       cfg,
       { kind: "ask", prompt: "hi" },
       { runRuntime },
     );
-    expect(reply).toContain("Something went wrong");
+    expect(result.reply).toContain("Something went wrong");
   });
 
   it("releases the lane even when the runtime never settles", async () => {
     const runRuntime = (() =>
       new Promise(() => {})) as unknown as typeof runAgentRuntime;
-    const reply = await runChannelAsk(
+    const result = await runChannelAsk(
       cfg,
       { kind: "ask", prompt: "hang forever" },
       { runRuntime, deadlineMs: 40, hardGraceMs: 40 },
     );
-    expect(reply).toContain("took me too long");
+    expect(result.reply).toContain("took me too long");
   });
 });

@@ -19,6 +19,8 @@ export interface ChannelTransport {
   name: "whatsapp" | "telegram";
   start(onMessage: ChannelHandler): Promise<void>;
   send(chatId: string, text: string): Promise<void>;
+  /** Optional "Gema is typing…" hint while an ask runs. Best-effort. */
+  typing?(chatId: string): Promise<void>;
   stop(): Promise<void>;
 }
 

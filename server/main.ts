@@ -102,10 +102,12 @@ async function main(): Promise<void> {
         } else {
           ran.add(claimed.actionId);
           const startedAt = Date.now();
-          await runClaimedTask(config, claimed);
+          const outcome = await runClaimedTask(config, claimed);
           console.log(
             `[gemaclaw] task ${claimed.actionId} finished in ${Math.round((Date.now() - startedAt) / 1000)}s`,
           );
+          // If a messenger chat filed this task, report the wrap-up there.
+          await router?.notifyTaskDone(claimed.actionId, outcome);
         }
       }
     } catch (err) {

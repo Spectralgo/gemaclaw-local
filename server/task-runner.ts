@@ -110,7 +110,7 @@ export async function runClaimedTask(
   config: GemaLocalConfig,
   task: ClaimedTask,
   deps: TaskRunnerDeps = {},
-): Promise<void> {
+): Promise<{ summary: string; ok: boolean }> {
   const runRuntime = deps.runRuntime ?? runAgentRuntime;
   const log = deps.log ?? fileLogger(task.actionId);
   let done: { summary: string; ok: boolean } | null = null;
@@ -178,6 +178,7 @@ export async function runClaimedTask(
     };
     log({ event: "complete", ...finished });
     await completeTask(task, finished.summary, finished.ok, trace);
+    return finished;
   } catch (err) {
     log({ event: "error", error: String(err) });
     // If the model already recorded its wrap-up, the task finished — a
@@ -190,6 +191,7 @@ export async function runClaimedTask(
       ok: false,
     };
     await completeTask(task, finished.summary, finished.ok, trace);
+    return finished;
   } finally {
     clearTimeout(watchdog);
   }

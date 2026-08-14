@@ -134,6 +134,12 @@ export class WhatsAppTransport implements ChannelTransport {
     });
   }
 
+  async typing(chatId: string): Promise<void> {
+    await this.socket
+      ?.sendPresenceUpdate("composing", chatId)
+      .catch(() => undefined);
+  }
+
   async send(chatId: string, text: string): Promise<void> {
     if (!this.socket) throw new Error("whatsapp socket not connected");
     await this.socket

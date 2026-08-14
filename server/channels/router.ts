@@ -42,6 +42,12 @@ const normalizePhone = (value: string) => value.replace(/[^0-9]/g, "");
 export class ChannelRouter {
   private readonly busy = new Map<string, boolean>();
   private readonly pending = new Map<string, ChannelMessage>();
+  /** Deep tasks filed from a chat — so the wrap-up can be reported back
+   * there when the poller finishes the task. Bounded FIFO. */
+  private readonly filedTasks = new Map<
+    string,
+    { transport: ChannelTransport; chatId: string }
+  >();
   private telegramOwner: string | undefined;
 
   constructor(
@@ -69,6 +75,30 @@ export class ChannelRouter {
   async stop(): Promise<void> {
     for (const transport of this.transports) {
       await transport.stop().catch(() => {});
+    }
+  }
+
+  /** The poller finished a deep task — if a chat filed it, tell that chat.
+   * Best-effort; the app's card is the durable record. */
+  async notifyTaskDone(
+    actionId: string,
+    outcome: { summary: string; ok: boolean },
+  ): Promise<void> {
+    const filed = this.filedTasks.get(actionId);
+    if (!filed) return;
+    this.filedTasks.delete(actionId);
+    const summary = outcome.summary.slice(0, NOTIFY_CAP);
+    const text = outcome.ok
+      ? `Done — ${summary}`
+      : `That deep task didn't finish cleanly: ${summary}`;
+    try {
+      for (const chunk of chunkText(
+        formatForChannel(filed.transport.name, text),
+      )) {
+        await filed.transport.send(filed.chatId, chunk);
+      }
+    } catch (err) {
+      console.error("[channels] completion notify failed:", err);
     }
   }
 
@@ -108,9 +138,22 @@ export class ChannelRouter {
     }
     this.busy.set(lane, true);
     try {
+      void transport.typing?.(message.chatId)?.catch(() => {});
       const runAsk = this.deps.runAsk ?? runChannelAsk;
-      const reply = await runAsk(this.config, trigger);
-      for (const chunk of chunkText(formatForChannel(message.channel, reply))) {
+      const result = await runAsk(this.config, trigger);
+      if (result.deepActionId) {
+        this.filedTasks.set(result.deepActionId, {
+          transport,
+          chatId: message.chatId,
+        });
+        if (this.filedTasks.size > 100) {
+          const oldest = this.filedTasks.keys().next().value;
+          if (oldest) this.filedTasks.delete(oldest);
+        }
+      }
+      for (const chunk of chunkText(
+        formatForChannel(message.channel, result.reply),
+      )) {
         await transport.send(message.chatId, chunk);
       }
     } catch (err) {
@@ -126,6 +169,8 @@ export class ChannelRouter {
     }
   }
 }
+
+const NOTIFY_CAP = 900;
 
 /** Messenger-safe text: strip markdown the channels render literally. */
 export function formatForChannel(
