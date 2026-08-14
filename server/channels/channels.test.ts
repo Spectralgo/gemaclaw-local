@@ -4,7 +4,7 @@ import { startFakeServer, type FakeServer } from "../gema/fake-server.js";
 import type { runAgentRuntime } from "../runtimes/index.js";
 import {
   DEEP_FILED_REPLY,
-  HELP_REPLY,
+  helpReply,
   parseTrigger,
   runChannelAsk,
 } from "./ask-runner.js";
@@ -74,6 +74,16 @@ describe("parseTrigger", () => {
     expect(
       parseTrigger("help me plan dinner", { requirePrefix: false }),
     ).toEqual({ kind: "ask", prompt: "help me plan dinner" });
+    // WhatsApp keeps its prefix invariant even for bot-command syntax:
+    // "/start" typed between humans must never summon Gema.
+    expect(parseTrigger("/start", { requirePrefix: true })).toBeNull();
+    expect(parseTrigger("/help", { requirePrefix: true })).toBeNull();
+  });
+
+  it("helpReply teaches the prefix on WhatsApp and plain asks on Telegram", () => {
+    expect(helpReply("whatsapp")).toContain("@gema what's on the list?");
+    expect(helpReply("whatsapp")).toContain("@gema deep:");
+    expect(helpReply("telegram")).not.toContain("@gema what's");
   });
 });
 
@@ -201,6 +211,24 @@ describe("ChannelRouter", () => {
     expect(transport.sent).toEqual(["answer:one", "answer:three"]);
   });
 
+  it("answers help itself with the channel-appropriate cheat-sheet", async () => {
+    const transport = fakeTransport();
+    const askCalls: string[] = [];
+    const router = new ChannelRouter(
+      config({ channels: { telegram: { botToken: "t", allowFrom: ["42"] } } }),
+      [transport],
+      {
+        runAsk: async (_cfg, trigger) => {
+          askCalls.push(trigger.kind);
+          return { reply: "should not run" };
+        },
+      },
+    );
+    await router.onMessage(transport, tgMessage("/help"));
+    expect(askCalls).toHaveLength(0);
+    expect(transport.sent[0]).toBe(helpReply("telegram"));
+  });
+
   it("reports a filed deep task's wrap-up back to the filing chat", async () => {
     const transport = fakeTransport();
     const router = new ChannelRouter(
@@ -250,7 +278,7 @@ describe("runChannelAsk", () => {
 
   it("answers help without touching the runtime or server", async () => {
     const result = await runChannelAsk(cfg, { kind: "help", prompt: "" });
-    expect(result.reply).toBe(HELP_REPLY);
+    expect(result.reply).toBe(helpReply("telegram"));
     expect(server.requests).toHaveLength(0);
   });
 

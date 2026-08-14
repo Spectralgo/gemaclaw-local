@@ -18,22 +18,32 @@ export interface ParsedTrigger {
   prompt: string;
 }
 
-/** The in-channel cheat-sheet — sent for /start, /help, and "@gema help". */
-export const HELP_REPLY = [
-  "Hi, I'm Gema — your household's assistant. Ask me anything about the household, for example:",
-  "",
-  "· what's on the list?",
-  "· what could we cook tonight?",
-  "· add whatever's missing for shakshuka",
-  "· tick off the milk",
-  "· tell the household I'll cook on Friday",
-  "",
-  "For bigger jobs, start with deep: — I'll file it as a task, someone approves it in the Gema app, and I'll work on it and report back here:",
-  "",
-  "· deep: plan next week's dinners and propose the shopping",
-  "",
-  "List changes always go through an approval card in the app — I never write the list directly.",
-].join("\n");
+/**
+ * The in-channel cheat-sheet — sent for /start, /help (Telegram) and
+ * "@gema help" (both). Channel-aware: WhatsApp examples carry the @gema
+ * prefix the channel requires, so following the guide actually works.
+ */
+export function helpReply(channel: "whatsapp" | "telegram"): string {
+  const p = channel === "whatsapp" ? "@gema " : "";
+  return [
+    "Hi, I'm Gema — your household's assistant. Ask me anything about the household, for example:",
+    "",
+    `· ${p}what's on the list?`,
+    `· ${p}what could we cook tonight?`,
+    `· ${p}add whatever's missing for shakshuka`,
+    `· ${p}tick off the milk`,
+    `· ${p}tell the household I'll cook on Friday`,
+    "",
+    `For bigger jobs, start with ${p}deep: — I'll file it as a task, someone approves it in the Gema app, and I'll work on it and report back here:`,
+    "",
+    `· ${p}deep: plan next week's dinners and propose the shopping`,
+    "",
+    "List changes always go through an approval card in the app — I never write the list directly.",
+    ...(channel === "whatsapp"
+      ? ["", "I only answer messages that start with @gema — everything else here stays between humans."]
+      : []),
+  ].join("\n");
+}
 
 /**
  * Decide whether a message is for Gema.
@@ -48,8 +58,12 @@ export function parseTrigger(
 ): ParsedTrigger | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
-  // Telegram bot commands are always for us (the chat is dedicated).
-  if (/^\/(start|help)\b/i.test(trimmed)) return { kind: "help", prompt: "" };
+  // Bot commands are for us only on the DEDICATED bot chat (Telegram).
+  // On WhatsApp the prefix invariant holds for everything — a human
+  // typing /start to a friend must never summon Gema.
+  if (!options.requirePrefix && /^\/(start|help)\b/i.test(trimmed)) {
+    return { kind: "help", prompt: "" };
+  }
   const unprefixed = trimmed.replace(/^@?gemm?a[:,]?\s+/i, "");
   const hadPrefix = unprefixed !== trimmed;
   const deep = unprefixed.match(/^deep[:,]\s*(.+)$/is);
@@ -182,7 +196,9 @@ export async function runChannelAsk(
   deps: AskRunnerDeps = {},
 ): Promise<ChannelAskResult> {
   if (trigger.kind === "help") {
-    return { reply: HELP_REPLY };
+    // Fallback path — the router normally answers help itself with the
+    // channel-appropriate variant.
+    return { reply: helpReply("telegram") };
   }
   if (trigger.kind === "deep") {
     try {

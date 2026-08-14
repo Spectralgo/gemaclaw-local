@@ -1,5 +1,5 @@
 import type { GemaLocalConfig } from "../config.js";
-import { parseTrigger, runChannelAsk } from "./ask-runner.js";
+import { helpReply, parseTrigger, runChannelAsk } from "./ask-runner.js";
 import {
   type ChannelMessage,
   type ChannelTransport,
@@ -129,6 +129,19 @@ export class ChannelRouter {
       requirePrefix: message.channel === "whatsapp",
     });
     if (!trigger) return;
+
+    // Help is instant and channel-specific — answer without a lane or
+    // the runtime (WhatsApp examples must carry the required prefix).
+    if (trigger.kind === "help") {
+      try {
+        for (const chunk of chunkText(helpReply(message.channel))) {
+          await transport.send(message.chatId, chunk);
+        }
+      } catch (err) {
+        console.error("[channels] help reply failed:", err);
+      }
+      return;
+    }
 
     const lane = this.laneKey(message);
     if (this.busy.get(lane)) {
