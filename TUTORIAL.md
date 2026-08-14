@@ -134,7 +134,7 @@ WhatsApp links the companion to **your own account** as a linked device — exac
 > `@gema what's still open on the list?`
 > `@gema deep: plan next week's dinners`
 
-While Gema thinks you'll see a typing indicator; when a `deep:` task you filed finishes, its wrap-up arrives back in the same chat.
+While Gema thinks you'll see a typing indicator; when a `deep:` task you filed finishes on this computer, its wrap-up arrives back in the same chat. (If your computer was offline when the task was approved, it runs in Gema's cloud and the result appears in the app instead.)
 
 **Why the prefix?** This is your real account — Gema must never hijack a human conversation. Only messages starting with `@gema` / `gema:` / `deep:` get answered; everything else is ignored. Group chats are always ignored.
 
