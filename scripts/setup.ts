@@ -64,6 +64,28 @@ async function main(): Promise<void> {
         message: "Model (empty = default)",
         initial: "",
       },
+      {
+        type: "confirm",
+        name: "telegram",
+        message:
+          "Connect a Telegram bot? (create one with @BotFather, ~1 min — recommended)",
+        initial: true,
+      },
+      {
+        type: (prev: boolean) => (prev ? "password" : null),
+        name: "telegramToken",
+        message: "Telegram bot token (from @BotFather)",
+        validate: (value: string) =>
+          /^\d+:[\w-]{30,}$/.test(value.trim()) ||
+          "That doesn't look like a bot token (123456:ABC-…)",
+      },
+      {
+        type: "confirm",
+        name: "whatsapp",
+        message:
+          "Link WhatsApp? (scan a QR with your phone on first start; @gema prefix required)",
+        initial: false,
+      },
     ],
     {
       onCancel: () => {
@@ -82,6 +104,14 @@ async function main(): Promise<void> {
     String(answers.deviceName).trim(),
   );
 
+  const channels: GemaLocalConfig["channels"] = {};
+  if (answers.telegram && answers.telegramToken) {
+    channels.telegram = { botToken: String(answers.telegramToken).trim() };
+  }
+  if (answers.whatsapp) {
+    channels.whatsapp = { enabled: true };
+  }
+
   const config: GemaLocalConfig = {
     serverUrl,
     companionToken: token,
@@ -89,6 +119,7 @@ async function main(): Promise<void> {
     ...(String(answers.model).trim()
       ? { model: String(answers.model).trim() }
       : {}),
+    ...(Object.keys(channels).length > 0 ? { channels } : {}),
   };
   saveConfig(config);
 

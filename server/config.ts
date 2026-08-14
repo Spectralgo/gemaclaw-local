@@ -4,12 +4,35 @@ import path from "node:path";
 
 export type RuntimeName = "claude" | "codex";
 
+export interface TelegramChannelConfig {
+  /** Bot token from @BotFather. The bot chat IS Gema — no prefix needed. */
+  botToken: string;
+  /** Telegram numeric user ids allowed to talk to the bot. Empty = the
+   * first user to message the bot is bound as owner and persisted here. */
+  allowFrom?: string[];
+  /** Test override for the Bot API origin. */
+  apiBase?: string;
+}
+
+export interface WhatsAppChannelConfig {
+  enabled: boolean;
+  /** E.164 numbers (besides your own self-chat) whose DMs may reach Gema.
+   * Prefix (@gema / gema: / deep:) is always required on WhatsApp. */
+  allowFrom?: string[];
+}
+
+export interface ChannelsConfig {
+  telegram?: TelegramChannelConfig;
+  whatsapp?: WhatsAppChannelConfig;
+}
+
 export interface GemaLocalConfig {
   serverUrl: string;
   companionToken: string;
   runtime: RuntimeName;
   model?: string;
   reasoningEffort?: string;
+  channels?: ChannelsConfig;
 }
 
 export const DEFAULT_MODELS: Record<RuntimeName, string> = {

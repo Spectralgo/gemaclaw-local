@@ -1,4 +1,8 @@
-import { loadConfig, resolveModel } from "./config.js";
+import { ChannelRouter } from "./channels/router.js";
+import { TelegramTransport } from "./channels/telegram.js";
+import type { ChannelTransport } from "./channels/types.js";
+import { WhatsAppTransport } from "./channels/whatsapp.js";
+import { loadConfig, resolveModel, saveConfig } from "./config.js";
 import {
   claimTask,
   CompanionAuthError,
@@ -26,6 +30,44 @@ async function main(): Promise<void> {
   console.log("  waiting for approved deep tasks…");
   console.log("════════════════════════════════════════════════");
 
+  // Messenger channels (Telegram bot / linked WhatsApp) — optional, and a
+  // channel failure must never take the deep-task poller down.
+  const transports: ChannelTransport[] = [];
+  if (config.channels?.telegram?.botToken) {
+    transports.push(new TelegramTransport(config.channels.telegram));
+  }
+  if (config.channels?.whatsapp?.enabled) {
+    transports.push(new WhatsAppTransport());
+  }
+  let router: ChannelRouter | undefined;
+  if (transports.length > 0) {
+    router = new ChannelRouter(config, transports, {
+      onTelegramOwnerBound: (userId) => {
+        const telegram = config.channels?.telegram;
+        if (!telegram) return;
+        try {
+          saveConfig({
+            ...config,
+            channels: {
+              ...config.channels,
+              telegram: { ...telegram, allowFrom: [userId] },
+            },
+          });
+        } catch (err) {
+          console.error("[channels] could not persist telegram owner:", err);
+        }
+      },
+    });
+    try {
+      await router.start();
+    } catch (err) {
+      console.error(
+        "[channels] channel startup failed (deep-task loop continues):",
+        err,
+      );
+    }
+  }
+
   const ran = new Set<string>();
   let backoff = POLL_INTERVAL_MS;
   let authFailures = 0;
@@ -33,6 +75,7 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => {
     if (stopping) process.exit(130);
     stopping = true;
+    void router?.stop();
     console.log("\n[gemaclaw] finishing up — Ctrl-C again to force quit");
   });
 

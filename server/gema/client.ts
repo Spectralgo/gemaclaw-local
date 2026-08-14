@@ -170,6 +170,74 @@ export async function brokerPost<T>(
 }
 
 /**
+ * Channel-remote calls (WhatsApp/Telegram asks) — companion-token
+ * authenticated, same status mapping as poll/claim: 403 = auth verdict,
+ * anything else transient.
+ */
+async function companionPost<T>(
+  config: GemaLocalConfig,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const { status, json } = await postJson(
+    `${config.serverUrl}/gemaclaw/companion${path}`,
+    { token: config.companionToken, ...body },
+  );
+  if (status === 403) throw new CompanionAuthError();
+  if (status !== 200) throw new Error(`${path} failed with HTTP ${status}`);
+  return json as T;
+}
+
+/** Bounded household context — what the hosted ask feeds its brain. */
+export async function fetchHouseholdContext(
+  config: GemaLocalConfig,
+): Promise<unknown> {
+  const result = await companionPost<{ context?: unknown }>(
+    config,
+    "/context",
+    {},
+  );
+  return result.context ?? {};
+}
+
+/** Grocery proposal via the approval door; null actionId = deduped away. */
+export async function proposeFromChannel(
+  config: GemaLocalConfig,
+  kind: "add_items" | "complete_items",
+  items: Array<{ id?: string; name: string; location?: string }>,
+): Promise<{ actionId: string | null }> {
+  const result = await companionPost<{ actionId?: string | null }>(
+    config,
+    "/propose",
+    { kind, items },
+  );
+  return { actionId: result.actionId ?? null };
+}
+
+/** Post to the household chat as Gema (visible to every member). */
+export async function postHouseholdMessage(
+  config: GemaLocalConfig,
+  text: string,
+): Promise<void> {
+  await companionPost(config, "/message", { text });
+}
+
+/** File a deep task draft — a member approves it in the app, then the
+ * companion's own poll/claim loop runs it. */
+export async function fileDeepTask(
+  config: GemaLocalConfig,
+  prompt: string,
+): Promise<{ actionId: string }> {
+  const result = await companionPost<{ actionId?: string }>(config, "/task", {
+    prompt,
+  });
+  if (typeof result.actionId !== "string") {
+    throw new Error("deep task draft returned an unexpected payload");
+  }
+  return { actionId: result.actionId };
+}
+
+/**
  * Report completion. Best-effort by design: the lease may already be dead
  * (budget exhausted, kill switch) and the server watchdog fails stale
  * tasks on its own, so a failed complete must never crash the runner.
