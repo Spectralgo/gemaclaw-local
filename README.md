@@ -40,7 +40,8 @@ cd gemaclaw-local
 npm install
 
 # In the Gema app: Settings → GemaClaw Local → "Pair a computer" (household owner)
-npm run setup   # server URL + the 8-char pairing code + runtime choice
+npm run setup   # server URL + the 8-char pairing code + runtime + channels
+npm run doctor  # optional health check — verifies every link in the chain
 npm start       # the companion polls for approved deep tasks
 ```
 

@@ -163,6 +163,9 @@ WhatsApp links the companion to **your own account** as a linked device — exac
 
 ## 9. Troubleshooting
 
+First move, always: `npm run doctor` — it checks the config, your runtime login, the server + pairing, and each channel, and tells you exactly what to fix.
+
+
 | Symptom | Fix |
 |---|---|
 | `npm start` says the token was rejected | Re-pair: Settings → GemaClaw Local → Pair a different computer, then `npm run setup`. |

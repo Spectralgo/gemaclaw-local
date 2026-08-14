@@ -2,7 +2,7 @@
   "name": "gemaclaw-local",
   "version": "0.1.0",
   "private": true,
-  "description": "Run GemaClaw — Gema's household deep-task agent — on your own computer and AI subscription.",
+  "description": "Run GemaClaw \u2014 Gema's household deep-task agent \u2014 on your own computer and AI subscription.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "start": "tsx server/main.ts",
     "dev": "tsx watch server/main.ts",
-    "setup": "tsx scripts/setup.ts"
+    "setup": "tsx scripts/setup.ts",
+    "doctor": "tsx scripts/doctor.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",

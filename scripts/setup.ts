@@ -127,10 +127,23 @@ async function main(): Promise<void> {
   console.log(
     `Runtime: ${runtime} — default model ${config.model ?? DEFAULT_MODELS[runtime]}`,
   );
-  console.log("\nStart the companion with:  npm start");
+  console.log("\nWhat's next:");
+  console.log("  1. npm start        — the companion begins polling for work");
+  if (config.channels?.telegram) {
+    console.log(
+      "  2. Open your Telegram bot and say hi — the first sender claims it.",
+    );
+  }
+  if (config.channels?.whatsapp?.enabled) {
+    console.log(
+      `  ${config.channels.telegram ? "3" : "2"}. WhatsApp: scan the QR that appears on start (Settings → Linked devices), then message yourself "@gema hello".`,
+    );
+  }
   console.log(
-    "Then ask Gema in chat:  @Gema deep: plan three dinners from our list",
+    "  Try a deep task from the Gema app chat:  deep: plan three dinners from our list",
   );
+  console.log("\nHealth check any time:  npm run doctor");
+  console.log("Full guide: TUTORIAL.md");
 }
 
 main().catch((err) => {
