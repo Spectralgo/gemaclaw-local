@@ -4,6 +4,7 @@ import { startFakeServer, type FakeServer } from "../gema/fake-server.js";
 import type { runAgentRuntime } from "../runtimes/index.js";
 import {
   DEEP_FILED_REPLY,
+  HELP_REPLY,
   parseTrigger,
   runChannelAsk,
 } from "./ask-runner.js";
@@ -50,6 +51,29 @@ describe("parseTrigger", () => {
   it("ignores empty and prefix-only messages", () => {
     expect(parseTrigger("  ", { requirePrefix: false })).toBeNull();
     expect(parseTrigger("@gema  ", { requirePrefix: true })).toBeNull();
+  });
+
+  it("routes /start, /help, and '@gema help' to the cheat-sheet", () => {
+    expect(parseTrigger("/start", { requirePrefix: false })).toEqual({
+      kind: "help",
+      prompt: "",
+    });
+    expect(parseTrigger("/help", { requirePrefix: false })).toEqual({
+      kind: "help",
+      prompt: "",
+    });
+    expect(parseTrigger("help", { requirePrefix: false })).toEqual({
+      kind: "help",
+      prompt: "",
+    });
+    expect(parseTrigger("@gema help", { requirePrefix: true })).toEqual({
+      kind: "help",
+      prompt: "",
+    });
+    // "help me plan dinner" is a real ask, not the cheat-sheet.
+    expect(
+      parseTrigger("help me plan dinner", { requirePrefix: false }),
+    ).toEqual({ kind: "ask", prompt: "help me plan dinner" });
   });
 });
 
@@ -223,6 +247,12 @@ describe("runChannelAsk", () => {
       text: await impl(request),
       usage: {} as never,
     })) as unknown as typeof runAgentRuntime;
+
+  it("answers help without touching the runtime or server", async () => {
+    const result = await runChannelAsk(cfg, { kind: "help", prompt: "" });
+    expect(result.reply).toBe(HELP_REPLY);
+    expect(server.requests).toHaveLength(0);
+  });
 
   it("files deep tasks through the channel surface", async () => {
     server.respond("POST", "/gemaclaw/companion/task", 200, {

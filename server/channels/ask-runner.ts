@@ -14,9 +14,26 @@ import type { RuntimeTool } from "../runtimes/types.js";
 const ASK_DEADLINE_MS = 90_000;
 
 export interface ParsedTrigger {
-  kind: "ask" | "deep";
+  kind: "ask" | "deep" | "help";
   prompt: string;
 }
+
+/** The in-channel cheat-sheet — sent for /start, /help, and "@gema help". */
+export const HELP_REPLY = [
+  "Hi, I'm Gema — your household's assistant. Ask me anything about the household, for example:",
+  "",
+  "· what's on the list?",
+  "· what could we cook tonight?",
+  "· add whatever's missing for shakshuka",
+  "· tick off the milk",
+  "· tell the household I'll cook on Friday",
+  "",
+  "For bigger jobs, start with deep: — I'll file it as a task, someone approves it in the Gema app, and I'll work on it and report back here:",
+  "",
+  "· deep: plan next week's dinners and propose the shopping",
+  "",
+  "List changes always go through an approval card in the app — I never write the list directly.",
+].join("\n");
 
 /**
  * Decide whether a message is for Gema.
@@ -31,13 +48,17 @@ export function parseTrigger(
 ): ParsedTrigger | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
+  // Telegram bot commands are always for us (the chat is dedicated).
+  if (/^\/(start|help)\b/i.test(trimmed)) return { kind: "help", prompt: "" };
   const unprefixed = trimmed.replace(/^@?gemm?a[:,]?\s+/i, "");
   const hadPrefix = unprefixed !== trimmed;
   const deep = unprefixed.match(/^deep[:,]\s*(.+)$/is);
   if (deep?.[1]) return { kind: "deep", prompt: deep[1].trim() };
   if (options.requirePrefix && !hadPrefix) return null;
   const prompt = unprefixed.trim();
-  return prompt.length > 0 ? { kind: "ask", prompt } : null;
+  if (prompt.length === 0) return null;
+  if (/^help$/i.test(prompt)) return { kind: "help", prompt: "" };
+  return { kind: "ask", prompt };
 }
 
 export const DEEP_FILED_REPLY =
@@ -160,6 +181,9 @@ export async function runChannelAsk(
   trigger: ParsedTrigger,
   deps: AskRunnerDeps = {},
 ): Promise<ChannelAskResult> {
+  if (trigger.kind === "help") {
+    return { reply: HELP_REPLY };
+  }
   if (trigger.kind === "deep") {
     try {
       const { actionId } = await fileDeepTask(
