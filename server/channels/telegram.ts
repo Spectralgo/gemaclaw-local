@@ -94,13 +94,18 @@ export class TelegramTransport implements ChannelTransport {
           ) {
             continue;
           }
-          await onMessage({
+          // Fire-and-forget: the router serializes per chat; awaiting here
+          // would stall every other chat (and the offset ack) behind one
+          // slow ask.
+          void onMessage({
             channel: "telegram",
             chatId: String(message.chat.id),
             senderId: String(message.from.id),
             text: message.text,
             selfChat: false,
-          });
+          }).catch((err) =>
+            console.error("[telegram] message handling failed:", err),
+          );
         }
       } catch (err) {
         if (this.stopped) return;

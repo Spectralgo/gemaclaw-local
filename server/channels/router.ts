@@ -55,8 +55,14 @@ export class ChannelRouter {
 
   async start(): Promise<void> {
     for (const transport of this.transports) {
-      await transport.start((message) => this.onMessage(transport, message));
-      console.log(`[channels] ${transport.name} ready`);
+      // Per-transport isolation: a bad Telegram token must not stop
+      // WhatsApp from starting (and vice versa).
+      try {
+        await transport.start((message) => this.onMessage(transport, message));
+        console.log(`[channels] ${transport.name} ready`);
+      } catch (err) {
+        console.error(`[channels] ${transport.name} failed to start:`, err);
+      }
     }
   }
 

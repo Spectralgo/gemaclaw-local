@@ -42,6 +42,27 @@ export class WhatsAppTransport implements ChannelTransport {
   private socket: ReturnType<typeof makeWASocket> | undefined;
   private stopped = false;
   private readonly sentIds = new Set<string>();
+  /** Recently-sent reply texts (bounded): belt-and-braces against our own
+   * self-chat replies echoing back before their id lands in sentIds
+   * (event-order races, replays after reconnect). */
+  private readonly sentTexts: string[] = [];
+
+  private markSent(id: string | undefined | null, text: string): void {
+    if (id) {
+      this.sentIds.add(id);
+      if (this.sentIds.size > 500) {
+        const oldest = this.sentIds.values().next().value;
+        if (oldest) this.sentIds.delete(oldest);
+      }
+    }
+    this.sentTexts.push(text);
+    if (this.sentTexts.length > 50) this.sentTexts.shift();
+  }
+
+  private isOwnEcho(id: string | undefined | null, text: string): boolean {
+    if (id && this.sentIds.has(id)) return true;
+    return this.sentTexts.includes(text);
+  }
 
   async start(onMessage: ChannelHandler): Promise<void> {
     await this.connect(onMessage);
@@ -98,7 +119,7 @@ export class WhatsAppTransport implements ChannelTransport {
           msg.message?.extendedTextMessage?.text ??
           "";
         if (!text) continue;
-        if (msg.key.id && this.sentIds.has(msg.key.id)) continue; // our reply
+        if (this.isOwnEcho(msg.key.id, text)) continue; // our own reply
         const selfChat = bareJid(remoteJid) === selfBare && selfBare !== "";
         // Outside self-chat, our own outgoing messages are not asks.
         if (msg.key.fromMe && !selfChat) continue;
@@ -118,8 +139,11 @@ export class WhatsAppTransport implements ChannelTransport {
     await this.socket
       .sendPresenceUpdate("composing", chatId)
       .catch(() => undefined);
+    // Record BEFORE sending so an upsert echo racing the send response
+    // can never be re-ingested as a fresh ask.
+    this.markSent(null, text);
     const sent = await this.socket.sendMessage(chatId, { text });
-    if (sent?.key?.id) this.sentIds.add(sent.key.id);
+    if (sent?.key?.id) this.markSent(sent.key.id, text);
   }
 
   async stop(): Promise<void> {

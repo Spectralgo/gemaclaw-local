@@ -140,6 +140,10 @@ function askSystemPrompt(): string {
 
 export interface AskRunnerDeps {
   runRuntime?: typeof runAgentRuntime;
+  /** Test override for the ask watchdog (default 90 s). */
+  deadlineMs?: number;
+  /** Test override for the extra lane-release grace (default 15 s). */
+  hardGraceMs?: number;
 }
 
 /** Run one channel ask on the configured subscription runtime and return
@@ -160,12 +164,26 @@ export async function runChannelAsk(
   }
 
   const runRuntime = deps.runRuntime ?? runAgentRuntime;
+  const deadlineMs = deps.deadlineMs ?? ASK_DEADLINE_MS;
   const used = { proposed: false };
   const tools = askTools(config, used);
   const abortController = new AbortController();
-  const watchdog = setTimeout(() => abortController.abort(), ASK_DEADLINE_MS);
+  const watchdog = setTimeout(() => abortController.abort(), deadlineMs);
+  // Hard lane-release deadline: even a runtime that ignores its abort
+  // signal must not wedge this chat forever — after the grace period we
+  // reply and release; the abandoned run can no longer affect the reply,
+  // and its tool surface is read/approval-gated anyway.
+  const hardDeadline = new Promise<never>((_, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("ask hard deadline")),
+      deadlineMs + (deps.hardGraceMs ?? 15_000),
+    );
+    timer.unref?.();
+  });
   try {
-    const result = await runRuntime(config, {
+    const result = await Promise.race([
+      hardDeadline,
+      runRuntime(config, {
       prompt: trigger.prompt,
       systemPrompt: askSystemPrompt(),
       tools,
@@ -177,17 +195,18 @@ export async function runChannelAsk(
         "WebFetch",
       ],
       disallowedTools: [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "NotebookEdit",
-        "Task",
-        "Skill",
-      ],
-    });
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Glob",
+          "Grep",
+          "NotebookEdit",
+          "Task",
+          "Skill",
+        ],
+      }),
+    ]);
     const reply = result.text.trim();
     if (reply.length > 0) return reply;
     return used.proposed

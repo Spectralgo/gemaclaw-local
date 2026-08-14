@@ -267,4 +267,15 @@ describe("runChannelAsk", () => {
     );
     expect(reply).toContain("Something went wrong");
   });
+
+  it("releases the lane even when the runtime never settles", async () => {
+    const runRuntime = (() =>
+      new Promise(() => {})) as unknown as typeof runAgentRuntime;
+    const reply = await runChannelAsk(
+      cfg,
+      { kind: "ask", prompt: "hang forever" },
+      { runRuntime, deadlineMs: 40, hardGraceMs: 40 },
+    );
+    expect(reply).toContain("took me too long");
+  });
 });
