@@ -89,6 +89,16 @@ describe("runClaimedTask", () => {
     expect(completeBody()).toMatchObject({ ok: false });
   });
 
+  it("honors a recorded done wrap-up even when the runtime throws afterwards", async () => {
+    const runRuntime = fakeRuntime(async (request) => {
+      const doneTool = request.tools.find((t) => t.name === "done");
+      await doneTool?.handle({ summary: "All wrapped up.", ok: true });
+      throw new Error("stream teardown after done");
+    });
+    await runClaimedTask(config, task, { runRuntime, log: () => {} });
+    expect(completeBody()).toMatchObject({ summary: "All wrapped up.", ok: true });
+  });
+
   it("includes the tool trace in the completion", async () => {
     server.respond("GET", "/gemaclaw/task-1/list", 200, { items: [] });
     const runRuntime = fakeRuntime(async (request) => {

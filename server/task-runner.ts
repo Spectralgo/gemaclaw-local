@@ -180,10 +180,16 @@ export async function runClaimedTask(
     await completeTask(task, finished.summary, finished.ok, trace);
   } catch (err) {
     log({ event: "error", error: String(err) });
-    const summary = abortController.signal.aborted
-      ? "This took longer than I allow myself locally — I stopped partway. Anything I already posted in chat still stands."
-      : "Something went wrong on the household computer while I worked on this.";
-    await completeTask(task, done?.summary ?? summary, false, trace);
+    // If the model already recorded its wrap-up, the task finished — a
+    // failure AFTER the done tool (stream teardown, abort) must not turn
+    // an honest success into a reported failure.
+    const finished = done ?? {
+      summary: abortController.signal.aborted
+        ? "This took longer than I allow myself locally — I stopped partway. Anything I already posted in chat still stands."
+        : "Something went wrong on the household computer while I worked on this.",
+      ok: false,
+    };
+    await completeTask(task, finished.summary, finished.ok, trace);
   } finally {
     clearTimeout(watchdog);
   }
