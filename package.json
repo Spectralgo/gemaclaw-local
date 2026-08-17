@@ -2,9 +2,10 @@
   "name": "gemaclaw-local",
   "version": "0.1.0",
   "private": true,
-  "description": "Run GemaClaw \u2014 Gema's household deep-task agent \u2014 on your own computer and AI subscription.",
+  "description": "Run GemaClaw — Gema's household deep-task agent — on your own computer and AI subscription.",
   "license": "MIT",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
@@ -12,7 +13,11 @@
     "start": "tsx server/main.ts",
     "dev": "tsx watch server/main.ts",
     "setup": "tsx scripts/setup.ts",
-    "doctor": "tsx scripts/doctor.ts"
+    "pair": "tsx scripts/pair.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "desktop:dev": "electron .",
+    "desktop:pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "desktop:dist": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
@@ -27,10 +32,44 @@
     "@types/node": "^22.0.0",
     "@types/prompts": "^2.4.9",
     "@types/qrcode-terminal": "^0.12.2",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "playwright-core": "^1.62.1",
     "typescript": "^5.6.0",
     "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20"
+  },
+  "build": {
+    "appId": "com.spectralgo.gemaclaw-local",
+    "productName": "GemaClaw Local",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": false,
+    "files": [
+      "electron/**",
+      "assets/**",
+      "server/**",
+      "scripts/**",
+      "docs/**",
+      "package.json",
+      "tsconfig.json",
+      ".env.example",
+      "!**/*.test.ts",
+      "!**/*.log",
+      "!docs/img/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "icon": "assets/icon.icns",
+      "target": [
+        "dir",
+        "zip"
+      ],
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
   }
 }
