@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("gemaclaw", {
   stop: () => ipcRenderer.invoke("gemaclaw:stop"),
   restart: () => ipcRenderer.invoke("gemaclaw:restart"),
   pair: (fields) => ipcRenderer.invoke("gemaclaw:pair", fields),
+  pendingPrefill: () => ipcRenderer.invoke("gemaclaw:pending-prefill"),
   doctor: () => ipcRenderer.invoke("gemaclaw:doctor"),
   openConfig: () => ipcRenderer.invoke("gemaclaw:open-config"),
   defaultDeviceName: () => ipcRenderer.invoke("gemaclaw:default-device-name"),
@@ -16,4 +17,6 @@ contextBridge.exposeInMainWorld("gemaclaw", {
     ipcRenderer.on("gemaclaw-log", (_event, line) => handler(line)),
   onPrefill: (handler) =>
     ipcRenderer.on("gemaclaw-prefill", (_event, prefill) => handler(prefill)),
+  onPrefillAvailable: (handler) =>
+    ipcRenderer.on("gemaclaw-prefill-available", () => handler()),
 });

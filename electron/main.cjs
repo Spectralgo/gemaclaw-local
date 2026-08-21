@@ -188,7 +188,11 @@ function ingestLine(rawLine) {
   pushLog(line);
 
   const next = { lastMessage: line.trim() };
-  if (/\[whatsapp\] linked as|\[whatsapp\] connection closed/.test(line)) {
+  if (
+    /\[whatsapp\] linked as|\[whatsapp\] connection closed|\[whatsapp\] this device was unlinked/.test(
+      line,
+    )
+  ) {
     next.whatsappQr = "";
   }
   if (/your computer is Gema's brain/.test(line)) next.state = "idle";
@@ -282,17 +286,21 @@ function startPoller() {
     pollerProcess = undefined;
     clearTimeout(stopTimer);
     if (quitting || intentionalStop) {
-      setStatus({ state: refreshFromConfig() ? "stopped" : "unpaired" });
+      setStatus({
+        state: refreshFromConfig() ? "stopped" : "unpaired",
+        whatsappQr: "",
+      });
       return;
     }
     if (status.state === "unpaired") {
       // Token rejected or config invalid — the pairing screen is next.
       showWindow();
-      setStatus({});
+      setStatus({ whatsappQr: "" });
       return;
     }
     setStatus({
       state: code === 0 ? "stopped" : "error",
+      whatsappQr: "", // a dead child's QR can never be scanned
       lastMessage:
         code === 0 ? "Companion stopped." : `Companion exited with code ${code}`,
     });
@@ -374,8 +382,14 @@ function runPair(fields) {
       pairProcess = undefined;
       if (result.ok) {
         refreshFromConfig();
-        setStatus({ state: "stopped", lastMessage: "Paired." });
-        startPoller();
+        setStatus({ lastMessage: "Paired." });
+        // Re-pairing while running must swap to the NEW config — a plain
+        // start would no-op and leave the old poller on the old server.
+        if (pollerProcess) {
+          restartPoller();
+        } else {
+          startPoller();
+        }
       }
       resolve(result);
     };
@@ -460,14 +474,31 @@ function handleDeepLink(rawUrl) {
     showWindow();
     deliverPrefill();
   }
-  // Cold-start deep links wait: whenReady + did-finish-load deliver them.
+  // Cold-start deep links wait: whenReady triggers delivery.
 }
 
+// Delivery is pull-based to dodge every push-vs-listener race: main only
+// pings "a prefill is waiting" (idempotent, retried briefly); the renderer
+// pulls the payload via gemaclaw:pending-prefill, which clears it. The
+// renderer's init() also pulls once, covering pings that fire before its
+// listeners exist.
+let prefillPingTimer;
+
 function deliverPrefill() {
-  if (!pendingPrefill || !mainWindow) return;
-  if (mainWindow.webContents.isLoading()) return; // did-finish-load re-delivers
-  mainWindow.webContents.send("gemaclaw-prefill", pendingPrefill);
-  pendingPrefill = undefined;
+  clearInterval(prefillPingTimer);
+  let attempts = 0;
+  const ping = () => {
+    if (!pendingPrefill || attempts >= 20) {
+      clearInterval(prefillPingTimer);
+      return;
+    }
+    attempts += 1;
+    if (mainWindow && !mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.send("gemaclaw-prefill-available");
+    }
+  };
+  ping();
+  prefillPingTimer = setInterval(ping, 300);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +611,6 @@ function createWindow() {
     return { action: "deny" };
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.webContents.on("did-finish-load", deliverPrefill);
   mainWindow.on("close", (event) => {
     // Menu-bar app: closing the window hides it, quitting is in the tray.
     if (!quitting) {
@@ -613,6 +643,11 @@ ipcMain.handle("gemaclaw:restart", () => {
   return statusPayload();
 });
 ipcMain.handle("gemaclaw:pair", (_event, fields) => runPair(fields || {}));
+ipcMain.handle("gemaclaw:pending-prefill", () => {
+  const prefill = pendingPrefill;
+  pendingPrefill = undefined;
+  return prefill || null;
+});
 ipcMain.handle("gemaclaw:doctor", () => runDoctor());
 ipcMain.handle("gemaclaw:open-config", () => shell.openPath(configDir()));
 ipcMain.handle("gemaclaw:default-device-name", () =>
@@ -620,43 +655,50 @@ ipcMain.handle("gemaclaw:default-device-name", () =>
 );
 
 if (!app.requestSingleInstanceLock()) {
+  // A losing instance must do nothing beyond quitting — registering
+  // handlers or reaching whenReady would transiently double the tray.
   app.quit();
-}
-app.on("second-instance", () => showWindow());
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  handleDeepLink(url);
-});
-app.setAsDefaultProtocolClient("gemaclaw");
+} else {
+  app.on("second-instance", () => showWindow());
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    handleDeepLink(url);
+  });
+  app.setAsDefaultProtocolClient("gemaclaw");
 
-app.whenReady().then(() => {
-  if (isMac && app.dock) app.dock.hide();
-  tray = new Tray(trayIcon());
-  tray.on("click", () => {
-    // Left-click opens the menu too — predictable for a status item.
-    tray.popUpContextMenu();
+  app.whenReady().then(() => {
+    if (isMac && app.dock) app.dock.hide();
+    tray = new Tray(trayIcon());
+    tray.on("click", () => {
+      // Left-click opens the menu too — predictable for a status item.
+      tray.popUpContextMenu();
+    });
+
+    refreshFromConfig();
+    updateTray();
+    if (readConfig()) {
+      startPoller();
+    } else {
+      showWindow();
+      setStatus({ state: "unpaired" });
+    }
+    if (pendingPrefill) {
+      showWindow();
+      deliverPrefill();
+    }
   });
 
-  refreshFromConfig();
-  updateTray();
-  if (readConfig()) {
-    startPoller();
-  } else {
-    showWindow();
-    setStatus({ state: "unpaired" });
-  }
-  if (pendingPrefill) showWindow();
-});
+  app.on("before-quit", () => {
+    quitting = true;
+    clearTimeout(stopTimer);
+    clearInterval(prefillPingTimer);
+    if (pollerProcess) {
+      intentionalStop = true;
+      pollerProcess.kill("SIGINT");
+    }
+  });
 
-app.on("before-quit", () => {
-  quitting = true;
-  clearTimeout(stopTimer);
-  if (pollerProcess) {
-    intentionalStop = true;
-    pollerProcess.kill("SIGINT");
-  }
-});
-
-app.on("window-all-closed", () => {
-  // Tray app: stay alive with no windows.
-});
+  app.on("window-all-closed", () => {
+    // Tray app: stay alive with no windows.
+  });
+}

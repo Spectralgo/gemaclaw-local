@@ -52,7 +52,9 @@ async function main(): Promise<void> {
 
   // 3. Server + pairing (one call proves both)
   try {
-    await pollTasks(config);
+    // probe: a health check must not heartbeat — the server would route
+    // deep tasks to this companion even though the poller isn't running.
+    await pollTasks(config, { probe: true });
     ok("server + pairing", config.serverUrl);
   } catch (err) {
     bad(

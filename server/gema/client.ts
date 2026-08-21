@@ -81,13 +81,18 @@ export async function pair(
   return token;
 }
 
-/** Heartbeat + list of approved tasks routed to this companion. */
+/** Heartbeat + list of approved tasks routed to this companion.
+ * `probe: true` skips the server-side heartbeat — for health checks that
+ * must not advertise a stopped companion as online. */
 export async function pollTasks(
   config: GemaLocalConfig,
+  opts?: { probe?: boolean },
 ): Promise<PendingTask[]> {
   const { status, json } = await postJson(
     `${config.serverUrl}/gemaclaw/companion/poll`,
-    { token: config.companionToken },
+    opts?.probe
+      ? { token: config.companionToken, probe: true }
+      : { token: config.companionToken },
   );
   if (status === 403) throw new CompanionAuthError();
   // 404 = flag off or server mid-restart — transient, not an auth verdict.

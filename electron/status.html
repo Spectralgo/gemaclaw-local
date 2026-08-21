@@ -254,6 +254,14 @@
         font-size: 13px;
         min-height: 18px;
       }
+      .pair-warning {
+        background: #f6ecd8;
+        border: 1px solid var(--amber);
+        color: #6d4d0f;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+      }
       .hint {
         color: var(--muted);
         font-size: 12px;
@@ -321,9 +329,13 @@
           <input type="checkbox" id="f-whatsapp" />
           Link WhatsApp (scan a QR on first start)
         </label>
+        <div id="pair-warning" class="pair-warning hidden"></div>
         <div id="pair-error"></div>
         <div class="controls">
           <button type="submit" class="primary" id="pair-submit">Pair</button>
+          <button type="button" class="link hidden" id="pair-back">
+            Back to status
+          </button>
         </div>
       </form>
     </section>

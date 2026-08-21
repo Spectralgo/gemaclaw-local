@@ -75,8 +75,18 @@
       "identity": null,
       "icon": "assets/icon.icns",
       "target": [
-        "dir",
-        "zip"
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "extendInfo": {
         "LSUIElement": true

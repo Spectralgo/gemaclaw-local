@@ -86,16 +86,46 @@ async function init() {
   $("log").textContent = lines.join("\n");
   $("log").scrollTop = $("log").scrollHeight;
 
-  window.gemaclaw.onStatus(renderStatus);
-  window.gemaclaw.onLog(appendLog);
-  window.gemaclaw.onPrefill((prefill) => {
+  const applyPrefill = (prefill) => {
     forcePairView = true;
     if (prefill.serverUrl) $("f-server").value = prefill.serverUrl;
     if (prefill.code) $("f-code").value = prefill.code;
     showView(currentState);
     $("pair-error").textContent = "";
-    ($("f-code").value ? $("pair-submit") : $("f-code")).focus();
+    // Deep links are attacker-reachable (any web page can navigate to
+    // gemaclaw://). Surface the target host and NEVER focus the submit
+    // button — pairing must be a deliberate, informed click.
+    let host = prefill.serverUrl;
+    try {
+      host = new URL(prefill.serverUrl).host;
+    } catch {}
+    const warning = $("pair-warning");
+    warning.textContent = host
+      ? `This pairing request points at ${host} — continue only if that is your Gema.`
+      : "";
+    warning.classList.toggle("hidden", !host);
+    $("pair-back").classList.toggle("hidden", currentState === "unpaired");
+    $("f-code").focus();
+  };
+
+  $("pair-back").addEventListener("click", () => {
+    forcePairView = false;
+    $("pair-warning").classList.add("hidden");
+    $("pair-back").classList.add("hidden");
+    showView(currentState);
   });
+
+  window.gemaclaw.onStatus(renderStatus);
+  window.gemaclaw.onLog(appendLog);
+  window.gemaclaw.onPrefill(applyPrefill);
+  // Prefills are pull-based: main pings availability (retried), we pull
+  // the payload (pulling clears it, so double-apply is impossible).
+  const pullPrefill = async () => {
+    const queued = await window.gemaclaw.pendingPrefill();
+    if (queued) applyPrefill(queued);
+  };
+  window.gemaclaw.onPrefillAvailable(pullPrefill);
+  await pullPrefill();
 
   $("b-start").addEventListener("click", () => window.gemaclaw.start());
   $("b-stop").addEventListener("click", () => window.gemaclaw.stop());
@@ -111,6 +141,8 @@ async function init() {
       for (const line of result.output.split("\n")) appendLog(line);
       appendLog(result.ok ? "── all good ──" : "── issues found (fixes above) ──");
       $("log").scrollTop = $("log").scrollHeight;
+    } catch (err) {
+      appendLog(`── health check failed to run: ${err?.message || err} ──`);
     } finally {
       button.disabled = false;
       button.textContent = "Run health check";
@@ -138,6 +170,8 @@ async function init() {
         error.textContent = result.error || "Pairing failed.";
       } else {
         forcePairView = false;
+        $("pair-warning").classList.add("hidden");
+        $("pair-back").classList.add("hidden");
       }
       // On success main flips state to stopped/starting and pushes a
       // status update, which swaps the view — nothing else to do here.

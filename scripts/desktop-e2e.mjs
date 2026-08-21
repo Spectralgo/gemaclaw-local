@@ -113,6 +113,13 @@ try {
   if (preServer !== "https://pr-999.gema.spectralgo.com")
     fail(`deep link server prefill got "${preServer}"`);
   if (preCode !== "ZYXW9876") fail(`deep link code prefill got "${preCode}"`);
+  // Security posture: the target host is surfaced, and focus must NOT be
+  // on the submit button (one keystroke must never complete a pairing).
+  const warning = await page.textContent("#pair-warning");
+  if (!warning?.includes("pr-999.gema.spectralgo.com"))
+    fail(`deep link warning missing host: "${warning}"`);
+  const focused = await page.evaluate(() => document.activeElement?.id || "");
+  if (focused === "pair-submit") fail("deep link focused the Pair button");
   await shot(page, "06-deeplink-prefill.png");
 
   console.log(`E2E PASS — screenshots in ${artifactDir}`);
