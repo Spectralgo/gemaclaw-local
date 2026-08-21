@@ -60,6 +60,8 @@ npm run desktop:dist   # build a distributable zip
 ```
 
 - The tray shows the live state — *not paired · watching for deep tasks · running a task · reconnecting* — with Start/Stop/Restart, Launch at Login, and a status window with the pairing form and a live log tail.
+- **Zero-typing pairing**: in Gema's settings, the pairing-code card has an "Open in the Mac app" link (`gemaclaw://pair?…`) that opens the app with server + code prefilled.
+- **WhatsApp linking shows a real QR** in the window (the terminal keeps its ASCII render), and a **Run health check** button surfaces `npm run doctor` without a terminal.
 - The app and the CLI are interchangeable: both read `~/.gemaclaw` (config + WhatsApp session), so you can pair in the app and later run `npm start` in a terminal, or vice versa. Closing the window just hides it; quit from the tray.
 - Stopping (or quitting) sends the same SIGINT drain as Ctrl-C in the terminal — a claimed task is left to the server watchdog, exactly like the CLI.
 - Non-interactive pairing is also available headless: `npm run pair -- --server <url> --code <8-chars> [--runtime claude|codex]`.
