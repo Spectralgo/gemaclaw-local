@@ -24,6 +24,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "dotenv": "^16.4.0",
     "prompts": "^2.4.2",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "tsx": "^4.19.0",
     "zod": "^3.23.0"
@@ -51,13 +52,23 @@
       "assets/**",
       "server/**",
       "scripts/**",
-      "docs/**",
       "package.json",
       "tsconfig.json",
       ".env.example",
       "!**/*.test.ts",
       "!**/*.log",
-      "!docs/img/**"
+      "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin/**",
+      "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux/**",
+      "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux/**",
+      "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-win32/**"
+    ],
+    "protocols": [
+      {
+        "name": "GemaClaw Local",
+        "schemes": [
+          "gemaclaw"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",

@@ -29,9 +29,11 @@ let tray;
 let mainWindow;
 let pollerProcess;
 let pairProcess;
+let doctorProcess;
 let quitting = false;
 let intentionalStop = false;
 let stopTimer;
+let pendingPrefill;
 
 const status = {
   // unpaired | stopped | starting | idle | task | reconnecting | error
@@ -44,6 +46,8 @@ const status = {
   channels: { telegram: false, whatsapp: false },
   configPath: "",
   lastMessage: "",
+  /** data: URL of the current WhatsApp link QR, or "" when none pending. */
+  whatsappQr: "",
 };
 const logLines = [];
 
@@ -169,9 +173,24 @@ function pushLog(line) {
 function ingestLine(rawLine) {
   const line = stripAnsi(rawLine).trimEnd();
   if (!line.trim()) return;
+
+  // WhatsApp link QR: render natively instead of dumping the payload/ASCII
+  // into the log panel.
+  const qrMatch = line.match(/^\[whatsapp\] qr (.+)$/);
+  if (qrMatch) {
+    pushLog("[whatsapp] pairing QR ready — scan it from this window");
+    require("qrcode")
+      .toDataURL(qrMatch[1], { margin: 1, width: 360 })
+      .then((dataUrl) => setStatus({ whatsappQr: dataUrl }))
+      .catch(() => undefined);
+    return;
+  }
   pushLog(line);
 
   const next = { lastMessage: line.trim() };
+  if (/\[whatsapp\] linked as|\[whatsapp\] connection closed/.test(line)) {
+    next.whatsappQr = "";
+  }
   if (/your computer is Gema's brain/.test(line)) next.state = "idle";
   const taskMatch = line.match(/\[gemaclaw\] task (\S+): "(.*)"$/);
   if (taskMatch) {
@@ -236,7 +255,13 @@ function startPoller() {
   }
 
   intentionalStop = false;
-  setStatus({ state: "starting", taskId: "", taskPrompt: "", lastMessage: "" });
+  setStatus({
+    state: "starting",
+    taskId: "",
+    taskPrompt: "",
+    lastMessage: "",
+    whatsappQr: "",
+  });
 
   const child = spawn(
     writeNodeShim().cmd,
@@ -281,7 +306,10 @@ function stopPoller() {
     return;
   }
   intentionalStop = true;
-  setStatus({ lastMessage: "Stopping — letting the companion finish up." });
+  setStatus({
+    lastMessage: "Stopping — letting the companion finish up.",
+    whatsappQr: "",
+  });
   child.kill("SIGINT");
   clearTimeout(stopTimer);
   stopTimer = setTimeout(() => {
@@ -375,6 +403,74 @@ function runPair(fields) {
 }
 
 // ---------------------------------------------------------------------------
+// Doctor — the CLI health check, surfaced in the window.
+// ---------------------------------------------------------------------------
+
+function runDoctor() {
+  return new Promise((resolve) => {
+    if (doctorProcess) {
+      resolve({ ok: false, output: "A health check is already running." });
+      return;
+    }
+    const child = spawn(
+      writeNodeShim().cmd,
+      [tsxCli(), path.join(appRoot(), "scripts", "doctor.ts")],
+      { cwd: appRoot(), env: childEnv(), stdio: ["ignore", "pipe", "pipe"] },
+    );
+    doctorProcess = child;
+    let output = "";
+    const collect = (chunk) => {
+      output += chunk.toString();
+    };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    const finish = (ok) => {
+      doctorProcess = undefined;
+      resolve({ ok, output: stripAnsi(output).trimEnd() });
+    };
+    child.on("error", (error) => {
+      output += `\n${error.message}`;
+      finish(false);
+    });
+    child.on("exit", (code) => finish(code === 0));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Deep links — gemaclaw://pair?server=…&code=… prefills the pairing form,
+// so Gema's settings card can hand off with zero typing.
+// ---------------------------------------------------------------------------
+
+function handleDeepLink(rawUrl) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return;
+  }
+  if (url.protocol !== "gemaclaw:") return;
+  const action = url.hostname || url.pathname.replace(/^\/+/, "");
+  if (action !== "pair") return;
+  const prefill = {
+    serverUrl: url.searchParams.get("server") || "",
+    code: (url.searchParams.get("code") || "").toUpperCase(),
+  };
+  pendingPrefill = prefill;
+  if (app.isReady()) {
+    showWindow();
+    deliverPrefill();
+  }
+  // Cold-start deep links wait: whenReady + did-finish-load deliver them.
+}
+
+function deliverPrefill() {
+  if (!pendingPrefill || !mainWindow) return;
+  if (mainWindow.webContents.isLoading()) return; // did-finish-load re-delivers
+  mainWindow.webContents.send("gemaclaw-prefill", pendingPrefill);
+  pendingPrefill = undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Tray + window
 // ---------------------------------------------------------------------------
 
@@ -413,6 +509,14 @@ function trayIcon() {
 function updateTray() {
   if (!tray) return;
   tray.setToolTip(`${productName} — ${STATE_LABELS[status.state] || status.state}`);
+  // A short glyph next to the icon when something needs a glance.
+  tray.setTitle(
+    status.state === "task"
+      ? "…"
+      : status.state === "reconnecting" || status.state === "error"
+        ? "!"
+        : "",
+  );
   const template = [
     { label: `${STATE_DOTS[status.state] || ""} ${STATE_LABELS[status.state] || status.state}`, enabled: false },
     ...(status.state === "task" && status.taskPrompt
@@ -476,6 +580,7 @@ function createWindow() {
     return { action: "deny" };
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.webContents.on("did-finish-load", deliverPrefill);
   mainWindow.on("close", (event) => {
     // Menu-bar app: closing the window hides it, quitting is in the tray.
     if (!quitting) {
@@ -508,10 +613,21 @@ ipcMain.handle("gemaclaw:restart", () => {
   return statusPayload();
 });
 ipcMain.handle("gemaclaw:pair", (_event, fields) => runPair(fields || {}));
+ipcMain.handle("gemaclaw:doctor", () => runDoctor());
 ipcMain.handle("gemaclaw:open-config", () => shell.openPath(configDir()));
 ipcMain.handle("gemaclaw:default-device-name", () =>
   os.hostname().replace(/\.local$/, ""),
 );
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+app.on("second-instance", () => showWindow());
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+app.setAsDefaultProtocolClient("gemaclaw");
 
 app.whenReady().then(() => {
   if (isMac && app.dock) app.dock.hide();
@@ -529,6 +645,7 @@ app.whenReady().then(() => {
     showWindow();
     setStatus({ state: "unpaired" });
   }
+  if (pendingPrefill) showWindow();
 });
 
 app.on("before-quit", () => {

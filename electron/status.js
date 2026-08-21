@@ -15,9 +15,12 @@ const STATE_LABELS = {
 };
 
 let currentState = "";
+// Set by a gemaclaw://pair deep link: keep the pairing form up (prefilled)
+// even while the poller is running, until the user pairs or navigates.
+let forcePairView = false;
 
 function showView(state) {
-  const pairing = state === "unpaired";
+  const pairing = forcePairView || state === "unpaired";
   $("view-pair").classList.toggle("hidden", !pairing);
   $("view-status").classList.toggle("hidden", pairing);
 }
@@ -25,7 +28,17 @@ function showView(state) {
 function renderStatus(status) {
   currentState = status.state;
   showView(status.state);
-  if (status.state === "unpaired") return;
+
+  const qrCard = $("qr-card");
+  if (status.whatsappQr) {
+    $("qr-img").src = status.whatsappQr;
+    qrCard.classList.remove("hidden");
+  } else {
+    qrCard.classList.add("hidden");
+    $("qr-img").removeAttribute("src");
+  }
+
+  if (forcePairView || status.state === "unpaired") return;
 
   $("s-label").textContent = STATE_LABELS[status.state] || status.state;
   $("s-dot").className = `dot ${status.state}`;
@@ -75,11 +88,34 @@ async function init() {
 
   window.gemaclaw.onStatus(renderStatus);
   window.gemaclaw.onLog(appendLog);
+  window.gemaclaw.onPrefill((prefill) => {
+    forcePairView = true;
+    if (prefill.serverUrl) $("f-server").value = prefill.serverUrl;
+    if (prefill.code) $("f-code").value = prefill.code;
+    showView(currentState);
+    $("pair-error").textContent = "";
+    ($("f-code").value ? $("pair-submit") : $("f-code")).focus();
+  });
 
   $("b-start").addEventListener("click", () => window.gemaclaw.start());
   $("b-stop").addEventListener("click", () => window.gemaclaw.stop());
   $("b-restart").addEventListener("click", () => window.gemaclaw.restart());
   $("b-config").addEventListener("click", () => window.gemaclaw.openConfig());
+  $("b-doctor").addEventListener("click", async () => {
+    const button = $("b-doctor");
+    button.disabled = true;
+    button.textContent = "Checking…";
+    try {
+      const result = await window.gemaclaw.doctor();
+      appendLog("── health check ─────────────────────");
+      for (const line of result.output.split("\n")) appendLog(line);
+      appendLog(result.ok ? "── all good ──" : "── issues found (fixes above) ──");
+      $("log").scrollTop = $("log").scrollHeight;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Run health check";
+    }
+  });
 
   $("pair-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -100,6 +136,8 @@ async function init() {
       });
       if (!result.ok) {
         error.textContent = result.error || "Pairing failed.";
+      } else {
+        forcePairView = false;
       }
       // On success main flips state to stopped/starting and pushes a
       // status update, which swaps the view — nothing else to do here.

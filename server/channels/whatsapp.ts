@@ -79,10 +79,15 @@ export class WhatsAppTransport implements ChannelTransport {
 
     socket.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
       if (qr) {
-        console.log(
-          "\n[whatsapp] Link this computer: WhatsApp → Settings → Linked devices → Link a device, then scan:\n",
-        );
-        qrcode.generate(qr, { small: true });
+        // Structured line first: the desktop shell parses it and renders a
+        // scannable QR in the window (ASCII QRs are unreadable there).
+        console.log(`[whatsapp] qr ${qr}`);
+        if (process.env.GEMACLAW_DESKTOP !== "1") {
+          console.log(
+            "\n[whatsapp] Link this computer: WhatsApp → Settings → Linked devices → Link a device, then scan:\n",
+          );
+          qrcode.generate(qr, { small: true });
+        }
       }
       if (connection === "open") {
         console.log(

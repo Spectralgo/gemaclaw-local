@@ -155,6 +155,20 @@
         padding: 0;
         text-decoration: underline;
       }
+      .qr-card {
+        margin-top: 14px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        border-color: var(--accent);
+      }
+      .qr-card img {
+        width: 148px;
+        height: 148px;
+        border-radius: 8px;
+        flex: none;
+        image-rendering: pixelated;
+      }
       #log {
         flex: 1;
         margin-top: 18px;
@@ -334,10 +348,23 @@
           <button id="b-stop">Stop</button>
         </div>
       </div>
+      <div class="card qr-card hidden" id="qr-card">
+        <div>
+          <b>Link WhatsApp</b>
+          <p class="hint" style="margin-top: 4px">
+            On your phone: WhatsApp → Settings → Linked devices → Link a
+            device, then scan this code.
+          </p>
+        </div>
+        <img id="qr-img" alt="WhatsApp link QR code" />
+      </div>
       <div id="log" aria-label="Companion log"></div>
       <div class="footer">
         <span id="s-last"></span>
-        <button class="link" id="b-config">Open config folder</button>
+        <span style="display: flex; gap: 14px; flex: none">
+          <button class="link" id="b-doctor">Run health check</button>
+          <button class="link" id="b-config">Open config folder</button>
+        </span>
       </div>
     </section>
 

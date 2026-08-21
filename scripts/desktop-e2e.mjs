@@ -59,6 +59,36 @@ try {
   const config = JSON.parse(readFileSync(path.join(ghome, "config.json"), "utf8"));
   if (config.companionToken !== "stub-companion-token") fail("config token mismatch");
 
+  // Doctor: config + server/pairing must pass against the stub.
+  await page.click("#b-doctor");
+  await page.waitForFunction(
+    () => document.getElementById("log")?.textContent?.includes("health check"),
+    { timeout: 30000 },
+  );
+  await page.waitForFunction(
+    () => /✓ config/.test(document.getElementById("log")?.textContent || ""),
+    { timeout: 30000 },
+  );
+  await shot(page, "04-doctor.png");
+
+  // WhatsApp QR card: drive the renderer with a synthetic status push.
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win.webContents.send("gemaclaw-status", {
+      state: "idle",
+      serverUrl: "http://127.0.0.1:4799",
+      runtime: "claude",
+      model: "claude-sonnet-4-6",
+      channels: { telegram: false, whatsapp: true },
+      whatsappQr:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      running: true,
+      lastMessage: "",
+    });
+  });
+  await page.waitForSelector("#qr-card:not(.hidden)", { timeout: 5000 });
+  await shot(page, "05-whatsapp-qr.png");
+
   await page.click("#b-stop");
   await page.waitForFunction(
     () => document.getElementById("s-label")?.textContent === "Stopped",
@@ -68,6 +98,22 @@ try {
 
   const startEnabled = await page.isEnabled("#b-start");
   if (!startEnabled) fail("Start button not re-enabled after stop");
+
+  // Deep link: gemaclaw://pair prefills the pairing form.
+  await app.evaluate(({ app: electronApp }) => {
+    electronApp.emit(
+      "open-url",
+      { preventDefault() {} },
+      "gemaclaw://pair?server=https%3A%2F%2Fpr-999.gema.spectralgo.com&code=zyxw9876",
+    );
+  });
+  await page.waitForSelector("#view-pair:not(.hidden)", { timeout: 5000 });
+  const preServer = await page.inputValue("#f-server");
+  const preCode = await page.inputValue("#f-code");
+  if (preServer !== "https://pr-999.gema.spectralgo.com")
+    fail(`deep link server prefill got "${preServer}"`);
+  if (preCode !== "ZYXW9876") fail(`deep link code prefill got "${preCode}"`);
+  await shot(page, "06-deeplink-prefill.png");
 
   console.log(`E2E PASS — screenshots in ${artifactDir}`);
 } finally {
