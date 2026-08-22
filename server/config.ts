@@ -26,6 +26,27 @@ export interface ChannelsConfig {
   whatsapp?: WhatsAppChannelConfig;
 }
 
+export interface AutoRoutine {
+  id: string;
+  name: string;
+  /** What Gema should do on this check-in, in plain language. */
+  prompt: string;
+  /** Local-time schedule: days 0 (Sun) – 6 (Sat) at "HH:MM". */
+  schedule: { days: number[]; time: string };
+  enabled: boolean;
+}
+
+export interface AutoConfig {
+  /** Master switch — off by default; routines never run while false. */
+  enabled: boolean;
+  /** Across ALL routines, per local calendar day. Default 6. */
+  maxRunsPerDay?: number;
+  /** Local-time window in which routines stay silent, e.g. 22:00–07:30
+   * (may wrap midnight). Missed slots are skipped, not deferred. */
+  quietHours?: { start: string; end: string };
+  routines: AutoRoutine[];
+}
+
 export interface GemaLocalConfig {
   serverUrl: string;
   companionToken: string;
@@ -33,6 +54,7 @@ export interface GemaLocalConfig {
   model?: string;
   reasoningEffort?: string;
   channels?: ChannelsConfig;
+  auto?: AutoConfig;
 }
 
 export const DEFAULT_MODELS: Record<RuntimeName, string> = {

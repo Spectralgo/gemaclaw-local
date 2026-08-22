@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data:"
+    />
+    <title>GemaClaw Local</title>
+    <style>
+      :root {
+        --paper: #faf6ef;
+        --ink: #2b2620;
+        --muted: #8a8074;
+        --line: #e7dfd2;
+        --accent: #177a53;
+        --accent-soft: #e3f0e9;
+        --amber: #b07d18;
+        --red: #b04a3a;
+        --card: #fffdf8;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font: 14px/1.5 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+        display: flex;
+        flex-direction: column;
+        padding: 44px 28px 20px;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .drag {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 38px;
+        -webkit-app-region: drag;
+      }
+      h1 {
+        font-family: "New York", Georgia, "Times New Roman", serif;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: var(--muted);
+        margin-top: 2px;
+        margin-bottom: 20px;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      /* ---- status view ---- */
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+      }
+      .state-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted);
+        flex: none;
+      }
+      .dot.idle {
+        background: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+      }
+      .dot.task {
+        background: var(--amber);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .dot.reconnecting {
+        background: var(--amber);
+      }
+      .dot.error {
+        background: var(--red);
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .state-label {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .task-prompt {
+        margin-top: 6px;
+        color: var(--muted);
+        font-style: italic;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .meta b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      button {
+        font: inherit;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        border-radius: 8px;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover:not(:disabled) {
+        filter: brightness(1.06);
+      }
+      .link {
+        background: none;
+        border: none;
+        color: var(--accent);
+        padding: 0;
+        text-decoration: underline;
+      }
+      .auto-card {
+        margin-top: 14px;
+      }
+      .auto-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .auto-routines {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .auto-routines:empty {
+        display: none;
+      }
+      .routine-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+      }
+      .routine-row .name {
+        font-weight: 500;
+      }
+      .routine-row .when {
+        color: var(--muted);
+        font-size: 12px;
+        flex: 1;
+        text-align: right;
+      }
+      .routine-row button {
+        padding: 3px 10px;
+        font-size: 12px;
+      }
+      .qr-card {
+        margin-top: 14px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        border-color: var(--accent);
+      }
+      .qr-card img {
+        width: 148px;
+        height: 148px;
+        border-radius: 8px;
+        flex: none;
+        image-rendering: pixelated;
+      }
+      #log {
+        flex: 1;
+        margin-top: 18px;
+        background: #141210;
+        color: #d7d0c4;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font: 11.5px/1.55 "SF Mono", ui-monospace, Menlo, monospace;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        -webkit-user-select: text;
+        user-select: text;
+        min-height: 120px;
+      }
+
+      /* ---- pairing view ---- */
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: 440px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      input[type="text"],
+      input[type="password"] {
+        font: inherit;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 7px 10px;
+        background: var(--card);
+        color: var(--ink);
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      input:focus {
+        outline: 2px solid var(--accent-soft);
+        border-color: var(--accent);
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+      }
+      .row > label {
+        flex: 1;
+      }
+      .choices {
+        display: flex;
+        gap: 8px;
+      }
+      .choices input {
+        display: none;
+      }
+      .choices span {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+        background: var(--card);
+        color: var(--ink);
+        font-size: 13px;
+      }
+      .choices input:checked + span {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .check {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 13px;
+      }
+      #pair-error {
+        color: var(--red);
+        font-size: 13px;
+        min-height: 18px;
+      }
+      .pair-warning {
+        background: #f6ecd8;
+        border: 1px solid var(--amber);
+        color: #6d4d0f;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .footer {
+        margin-top: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .footer #s-last {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .footer .link {
+        flex: none;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="drag"></div>
+
+    <section id="view-pair" class="hidden">
+      <h1>Pair this computer</h1>
+      <p class="sub">
+        In Gema: Settings → GemaClaw Local → “Pair a computer”, then copy the
+        8-character code here.
+      </p>
+      <form id="pair-form">
+        <label>
+          Gema server
+          <input type="text" id="f-server" value="https://gema.spectralgo.com" spellcheck="false" />
+        </label>
+        <div class="row">
+          <label>
+            Pairing code
+            <input type="text" id="f-code" maxlength="8" placeholder="8 characters" spellcheck="false" autofocus />
+          </label>
+          <label>
+            This computer's name
+            <input type="text" id="f-name" spellcheck="false" />
+          </label>
+        </div>
+        <label>
+          Which subscription runs the agent?
+          <div class="choices">
+            <label><input type="radio" name="runtime" value="claude" checked /><span>Claude Code</span></label>
+            <label><input type="radio" name="runtime" value="codex" /><span>Codex / ChatGPT</span></label>
+          </div>
+        </label>
+        <label>
+          <span>Model <span class="hint">(empty = default)</span></span>
+          <input type="text" id="f-model" spellcheck="false" />
+        </label>
+        <label>
+          <span>Telegram bot token <span class="hint">(optional — from @BotFather; the bot chat becomes Gema)</span></span>
+          <input type="password" id="f-telegram" spellcheck="false" />
+        </label>
+        <label class="check">
+          <input type="checkbox" id="f-whatsapp" />
+          Link WhatsApp (scan a QR on first start)
+        </label>
+        <div id="pair-warning" class="pair-warning hidden"></div>
+        <div id="pair-error"></div>
+        <div class="controls">
+          <button type="submit" class="primary" id="pair-submit">Pair</button>
+          <button type="button" class="link hidden" id="pair-back">
+            Back to status
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section id="view-status" class="hidden" style="display: flex; flex-direction: column; flex: 1">
+      <h1>GemaClaw Local</h1>
+      <p class="sub">Your computer is Gema's brain for deep tasks.</p>
+      <div class="card">
+        <div class="state-row">
+          <span class="dot" id="s-dot"></span>
+          <span class="state-label" id="s-label">…</span>
+        </div>
+        <div class="task-prompt hidden" id="s-task"></div>
+        <div class="meta">
+          <span>Server <b id="s-server">—</b></span>
+          <span>Runtime <b id="s-runtime">—</b></span>
+          <span>Channels <b id="s-channels">—</b></span>
+        </div>
+        <div class="controls">
+          <button id="b-start">Start</button>
+          <button id="b-restart">Restart</button>
+          <button id="b-stop">Stop</button>
+        </div>
+      </div>
+      <div class="card auto-card" id="auto-card">
+        <div class="auto-head">
+          <div>
+            <b>Auto mode</b>
+            <p class="hint" style="margin-top: 2px">
+              Gema checks in on a schedule — briefs and plans appear in the
+              household chat; list changes still need approval.
+            </p>
+          </div>
+          <label class="check" style="flex: none">
+            <input type="checkbox" id="auto-enabled" />
+            On
+          </label>
+        </div>
+        <div id="auto-routines" class="auto-routines"></div>
+        <p class="hint" id="auto-meta"></p>
+      </div>
+      <div class="card qr-card hidden" id="qr-card">
+        <div>
+          <b>Link WhatsApp</b>
+          <p class="hint" style="margin-top: 4px">
+            On your phone: WhatsApp → Settings → Linked devices → Link a
+            device, then scan this code.
+          </p>
+        </div>
+        <img id="qr-img" alt="WhatsApp link QR code" />
+      </div>
+      <div id="log" aria-label="Companion log"></div>
+      <div class="footer">
+        <span id="s-last"></span>
+        <span style="display: flex; gap: 14px; flex: none">
+          <button class="link" id="b-doctor">Run health check</button>
+          <button class="link" id="b-config">Open config folder</button>
+        </span>
+      </div>
+    </section>
+
+    <script src="status.js"></script>
+  </body>
+</html>

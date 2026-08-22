@@ -49,6 +49,35 @@ Then in Gema chat: `@Gema deep: plan three dinners from our list`. Approve the c
 
 If the companion is offline when a task is approved, the task simply runs in Gema's hosted sandbox instead — pairing never takes capability away.
 
+## Desktop app (macOS)
+
+Prefer not to keep a terminal open? The same companion ships as a **menu-bar app**: pair from a window, and the poller runs quietly in the background with its status one click away.
+
+```bash
+npm run desktop:dev    # run the app from this checkout
+npm run desktop:pack   # build an unsigned GemaClaw Local.app in dist/mac-arm64
+npm run desktop:dist   # build a distributable zip
+```
+
+- The tray shows the live state — *not paired · watching for deep tasks · running a task · reconnecting* — with Start/Stop/Restart, Launch at Login, and a status window with the pairing form and a live log tail.
+- **Zero-typing pairing**: in Gema's settings, the pairing-code card has an "Open in the Mac app" link (`gemaclaw://pair?…`) that opens the app with server + code prefilled.
+- **WhatsApp linking shows a real QR** in the window (the terminal keeps its ASCII render), and a **Run health check** button surfaces `npm run doctor` without a terminal.
+
+## Auto mode — Gema checks in on her own
+
+With auto mode on, Gema initiates: scheduled **routines** run on your subscription and post a short, useful note to the household chat — a morning brief, a Sunday week-planner, or anything you write yourself. The trust contract is unchanged: routines can *say* things and *suggest* things, but every list change is still an approval card, and a routine with nothing worth saying stays silent.
+
+- Toggle it in the app's **Auto mode** card (per-routine switches, next-run times, Run now), or from the CLI: `npm run auto -- --get | --enable | --toggle-routine <id> | --run-now <id>`.
+- Defaults: a daily **Morning brief** (08:00) and a **Sunday week planner** (18:00). Edit or add routines via `npm run auto -- --set-auto '<json>'` (id, name, prompt, `schedule: {days, time}` in local time).
+- Guardrails: hard cap of 6 automatic runs per day (configurable), optional quiet hours, missed slots run within a 4-hour grace window and are otherwise skipped — never deferred into the night. Deep tasks always have right of way over routines.
+- Works identically under `npm start` — the desktop app is just the friendly face.
+- The app and the CLI are interchangeable: both read `~/.gemaclaw` (config + WhatsApp session), so you can pair in the app and later run `npm start` in a terminal, or vice versa. Closing the window just hides it; quit from the tray.
+- Stopping (or quitting) sends the same SIGINT drain as Ctrl-C in the terminal — a claimed task is left to the server watchdog, exactly like the CLI.
+- Non-interactive pairing is also available headless: `npm run pair -- --server <url> --code <8-chars> [--runtime claude|codex]`.
+- End-to-end check without a real server: `node scripts/stub-gema-server.mjs &` then `node scripts/desktop-e2e.mjs <shots-dir>` (drives the app UI with Playwright against the stub).
+
+The bundle is unsigned (right-click → Open on first launch). The app never bundles secrets — everything mutable stays in `~/.gemaclaw`.
+
 ## How it works
 
 | Piece | File | Job |
