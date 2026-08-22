@@ -390,6 +390,15 @@ function runPair(fields) {
         } else {
           startPoller();
         }
+        // First-run safety net: a missing/signed-out runtime should surface
+        // NOW, not on the first approved task. Probe-only, so it never
+        // fakes companion liveness.
+        runDoctor()
+          .then((doctor) => {
+            pushLog("── post-pair health check ─────────────");
+            for (const line of doctor.output.split("\n")) pushLog(line);
+          })
+          .catch(() => undefined);
       }
       resolve(result);
     };
