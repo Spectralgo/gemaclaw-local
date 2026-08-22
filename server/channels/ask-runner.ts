@@ -181,6 +181,93 @@ export interface AskRunnerDeps {
   hardGraceMs?: number;
 }
 
+/** Reply sentinel: a routine with nothing worth saying stays silent. */
+export const ROUTINE_SKIP = "SKIP";
+
+function routineSystemPrompt(routineName: string): string {
+  return [
+    "You are Gema, a warm household grocery assistant. This is a PROACTIVE",
+    `check-in you initiate yourself (routine: "${routineName}") — nobody asked a question.`,
+    "First read the household context. Ground everything in that real data; never invent list contents, events, or expenses.",
+    "Write ONE short, warm, genuinely useful note for the household chat: a few plain-text sentences, no markdown, no emoji, no greetings like 'just checking in'. Lead with the useful thing.",
+    "You may send approval-gated suggestions with the tools — you cannot write the list directly, and you cannot delete anything.",
+    `If there is truly nothing useful to say right now, reply with exactly ${ROUTINE_SKIP} and nothing else — silence is better than noise.`,
+    "Your final text IS the chat note that will be posted (or SKIP). Never mention being a model, agent, routine, or companion process.",
+  ].join("\n");
+}
+
+export interface RoutineRunResult {
+  /** The note to post, or undefined when Gema chose silence. */
+  message?: string;
+  /** True when the run failed (timeout/error) rather than skipped. */
+  failed?: boolean;
+}
+
+/**
+ * Run one proactive routine on the subscription runtime. The final text
+ * becomes the household-chat note — the post tool is deliberately absent
+ * so a routine can never double-post. Never throws.
+ */
+export async function runProactiveRoutine(
+  config: GemaLocalConfig,
+  routine: { name: string; prompt: string },
+  deps: AskRunnerDeps = {},
+): Promise<RoutineRunResult> {
+  const runRuntime = deps.runRuntime ?? runAgentRuntime;
+  const deadlineMs = deps.deadlineMs ?? ASK_DEADLINE_MS;
+  const used = { proposed: false };
+  const tools = askTools(config, used).filter(
+    (tool) => tool.name !== "post_to_household_chat",
+  );
+  const abortController = new AbortController();
+  const watchdog = setTimeout(() => abortController.abort(), deadlineMs);
+  const hardDeadline = new Promise<never>((_, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("routine hard deadline")),
+      deadlineMs + (deps.hardGraceMs ?? 15_000),
+    );
+    timer.unref?.();
+  });
+  try {
+    const result = await Promise.race([
+      hardDeadline,
+      runRuntime(config, {
+        prompt: routine.prompt,
+        systemPrompt: routineSystemPrompt(routine.name),
+        tools,
+        mode: "execution",
+        abortController,
+        allowedTools: [
+          ...tools.map((tool) => `mcp__gema__${tool.name}`),
+          "WebSearch",
+          "WebFetch",
+        ],
+        disallowedTools: [
+          "Bash",
+          "Read",
+          "Write",
+          "Edit",
+          "Glob",
+          "Grep",
+          "NotebookEdit",
+          "Task",
+          "Skill",
+        ],
+      }),
+    ]);
+    const text = result.text.trim();
+    if (text.length === 0 || text.toUpperCase() === ROUTINE_SKIP) {
+      return {};
+    }
+    return { message: text };
+  } catch (err) {
+    console.error(`[auto] routine "${routine.name}" failed:`, err);
+    return { failed: true };
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
 export interface ChannelAskResult {
   reply: string;
   /** Set when a deep task was filed — the router uses it to report the

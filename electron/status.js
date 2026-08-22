@@ -79,6 +79,79 @@ function appendLog(line) {
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function scheduleLabel(schedule) {
+  const days =
+    schedule.days.length === 7
+      ? "Every day"
+      : schedule.days.map((d) => DAY_NAMES[d] || "?").join(", ");
+  return `${days} · ${schedule.time}`;
+}
+
+function renderAuto(view) {
+  if (!view?.ok) return;
+  $("auto-enabled").checked = Boolean(view.auto.enabled);
+  const list = $("auto-routines");
+  list.textContent = "";
+  for (const routine of view.auto.routines) {
+    const row = document.createElement("div");
+    row.className = "routine-row";
+
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = routine.enabled;
+    toggle.disabled = !view.auto.enabled;
+    toggle.addEventListener("change", async () => {
+      renderAuto(await window.gemaclaw.autoToggleRoutine(routine.id));
+    });
+
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = routine.name;
+
+    const when = document.createElement("span");
+    when.className = "when";
+    const next = view.nextRuns?.[routine.id];
+    when.textContent =
+      scheduleLabel(routine.schedule) +
+      (next ? ` · next ${new Date(next).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "");
+
+    const run = document.createElement("button");
+    run.type = "button";
+    run.textContent = "Run now";
+    run.addEventListener("click", async () => {
+      run.disabled = true;
+      run.textContent = "Running…";
+      try {
+        const result = await window.gemaclaw.autoRunNow(routine.id);
+        if (!result.ok) {
+          appendLog(`[auto] run failed: ${result.error || "unknown error"}`);
+        } else if (result.skipped) {
+          appendLog(`[auto] "${routine.name}" had nothing to say (skipped)`);
+        } else {
+          appendLog(`[auto] "${routine.name}" posted: ${result.message}`);
+        }
+        $("log").scrollTop = $("log").scrollHeight;
+      } finally {
+        run.disabled = false;
+        run.textContent = "Run now";
+      }
+    });
+
+    row.append(toggle, name, when, run);
+    list.append(row);
+  }
+  const cap = view.auto.maxRunsPerDay ?? 6;
+  $("auto-meta").textContent = view.auto.enabled
+    ? `${view.runsToday}/${cap} automatic runs today${view.auto.quietHours ? ` · quiet ${view.auto.quietHours.start}–${view.auto.quietHours.end}` : ""}`
+    : "Off — Gema only acts when asked.";
+}
+
+async function refreshAuto() {
+  renderAuto(await window.gemaclaw.autoGet());
+}
+
 async function init() {
   $("f-name").value = await window.gemaclaw.defaultDeviceName();
   renderStatus(await window.gemaclaw.getStatus());
@@ -125,7 +198,10 @@ async function init() {
     if (queued) applyPrefill(queued);
   };
   window.gemaclaw.onPrefillAvailable(pullPrefill);
-  await pullPrefill();
+
+  $("auto-enabled").addEventListener("change", async (event) => {
+    renderAuto(await window.gemaclaw.autoEnable(event.target.checked));
+  });
 
   $("b-start").addEventListener("click", () => window.gemaclaw.start());
   $("b-stop").addEventListener("click", () => window.gemaclaw.stop());
@@ -172,6 +248,7 @@ async function init() {
         forcePairView = false;
         $("pair-warning").classList.add("hidden");
         $("pair-back").classList.add("hidden");
+        refreshAuto();
       }
       // On success main flips state to stopped/starting and pushes a
       // status update, which swaps the view — nothing else to do here.
@@ -180,6 +257,14 @@ async function init() {
       submit.textContent = "Pair";
     }
   });
+
+  // Data loads come LAST: every listener above must be live before any
+  // slow await (auto-config spawns tsx, ~seconds) — otherwise an early
+  // click lands on a deaf form.
+  await pullPrefill();
+  await refreshAuto();
+  // Keep next-run times and the daily counter roughly current.
+  setInterval(refreshAuto, 5 * 60 * 1000);
 }
 
 init().catch((err) => {

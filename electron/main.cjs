@@ -426,6 +426,50 @@ function runPair(fields) {
 }
 
 // ---------------------------------------------------------------------------
+// Auto mode — thin IPC over scripts/auto-config.ts (single source of truth
+// shared with the CLI). Each call spawns the script and parses its one
+// JSON result line.
+// ---------------------------------------------------------------------------
+
+function runAutoCli(args) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      writeNodeShim().cmd,
+      [tsxCli(), path.join(appRoot(), "scripts", "auto-config.ts"), ...args],
+      { cwd: appRoot(), env: childEnv(), stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => resolve({ ok: false, error: error.message }));
+    child.on("exit", () => {
+      const jsonLine = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .reverse()
+        .find((line) => line.startsWith("{") && line.endsWith("}"));
+      if (!jsonLine) {
+        resolve({
+          ok: false,
+          error: stderr.trim() || "auto-config returned no result",
+        });
+        return;
+      }
+      try {
+        resolve(JSON.parse(jsonLine));
+      } catch (error) {
+        resolve({ ok: false, error: String(error) });
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Doctor — the CLI health check, surfaced in the window.
 // ---------------------------------------------------------------------------
 
@@ -658,6 +702,16 @@ ipcMain.handle("gemaclaw:pending-prefill", () => {
   return prefill || null;
 });
 ipcMain.handle("gemaclaw:doctor", () => runDoctor());
+ipcMain.handle("gemaclaw:auto-get", () => runAutoCli(["--get"]));
+ipcMain.handle("gemaclaw:auto-enable", (_event, enabled) =>
+  runAutoCli([enabled ? "--enable" : "--disable"]),
+);
+ipcMain.handle("gemaclaw:auto-toggle-routine", (_event, id) =>
+  runAutoCli(["--toggle-routine", String(id)]),
+);
+ipcMain.handle("gemaclaw:auto-run-now", (_event, id) =>
+  runAutoCli(["--run-now", String(id)]),
+);
 ipcMain.handle("gemaclaw:open-config", () => shell.openPath(configDir()));
 ipcMain.handle("gemaclaw:default-device-name", () =>
   os.hostname().replace(/\.local$/, ""),

@@ -155,6 +155,43 @@
         padding: 0;
         text-decoration: underline;
       }
+      .auto-card {
+        margin-top: 14px;
+      }
+      .auto-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .auto-routines {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .auto-routines:empty {
+        display: none;
+      }
+      .routine-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+      }
+      .routine-row .name {
+        font-weight: 500;
+      }
+      .routine-row .when {
+        color: var(--muted);
+        font-size: 12px;
+        flex: 1;
+        text-align: right;
+      }
+      .routine-row button {
+        padding: 3px 10px;
+        font-size: 12px;
+      }
       .qr-card {
         margin-top: 14px;
         display: flex;
@@ -359,6 +396,23 @@
           <button id="b-restart">Restart</button>
           <button id="b-stop">Stop</button>
         </div>
+      </div>
+      <div class="card auto-card" id="auto-card">
+        <div class="auto-head">
+          <div>
+            <b>Auto mode</b>
+            <p class="hint" style="margin-top: 2px">
+              Gema checks in on a schedule — briefs and plans appear in the
+              household chat; list changes still need approval.
+            </p>
+          </div>
+          <label class="check" style="flex: none">
+            <input type="checkbox" id="auto-enabled" />
+            On
+          </label>
+        </div>
+        <div id="auto-routines" class="auto-routines"></div>
+        <p class="hint" id="auto-meta"></p>
       </div>
       <div class="card qr-card hidden" id="qr-card">
         <div>

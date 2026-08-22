@@ -59,6 +59,29 @@ try {
   const config = JSON.parse(readFileSync(path.join(ghome, "config.json"), "utf8"));
   if (config.companionToken !== "stub-companion-token") fail("config token mismatch");
 
+  // Auto mode: enabling seeds the default routines and persists to config.
+  await page.check("#auto-enabled");
+  // The meta line flips to the runs-today counter only after the enable
+  // round-trips through auto-config (a tsx spawn) and re-renders.
+  await page.waitForFunction(
+    () =>
+      document
+        .getElementById("auto-meta")
+        ?.textContent?.includes("automatic runs today"),
+    { timeout: 30000 },
+  );
+  await page.waitForFunction(
+    () => document.querySelectorAll("#auto-routines .routine-row").length >= 2,
+    { timeout: 15000 },
+  );
+  const autoConfig = JSON.parse(
+    readFileSync(path.join(ghome, "config.json"), "utf8"),
+  );
+  if (autoConfig.auto?.enabled !== true) fail("auto.enabled not persisted");
+  if ((autoConfig.auto?.routines?.length ?? 0) < 2)
+    fail("default routines not seeded");
+  await shot(page, "07-auto-mode.png");
+
   // Doctor: config + server/pairing must pass against the stub.
   await page.click("#b-doctor");
   await page.waitForFunction(

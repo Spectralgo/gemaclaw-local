@@ -1,3 +1,4 @@
+import { autoTick } from "./auto/scheduler.js";
 import { ChannelRouter } from "./channels/router.js";
 import { TelegramTransport } from "./channels/telegram.js";
 import type { ChannelTransport } from "./channels/types.js";
@@ -85,6 +86,11 @@ async function main(): Promise<void> {
       backoff = POLL_INTERVAL_MS;
       authFailures = 0;
       const next = tasks.find((task) => !ran.has(task.actionId));
+      if (!next && !stopping) {
+        // Auto mode: proactive routines run only when no approved task is
+        // waiting — deep tasks always have right of way.
+        await autoTick();
+      }
       if (next && !stopping) {
         console.log(
           `[gemaclaw] task ${next.actionId}: "${next.prompt.slice(0, 80)}"`,

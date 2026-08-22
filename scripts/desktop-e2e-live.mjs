@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -156,7 +157,77 @@ try {
   await web.screenshot({ path: path.join(artifactDir, "live-07-result-in-chat.png") });
   await appWindow.screenshot({ path: path.join(artifactDir, "live-08-app-done.png") });
 
-  console.log(`LIVE E2E PASS — proof word ${PROOF_WORD}, shots in ${artifactDir}`);
+  // ---- 8. AUTO MODE: a proactive routine posts on its own ----------------
+  step("auto mode run-now");
+  const AUTO_WORD = `AUTOPROOF-${Date.now().toString(36).toUpperCase()}`;
+  const autoCli = (args) => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        path.join(appRoot, "node_modules", "tsx", "dist", "cli.mjs"),
+        path.join(appRoot, "scripts", "auto-config.ts"),
+        ...args,
+      ],
+      {
+        cwd: appRoot,
+        env: { ...process.env, NODE_OPTIONS: "", GEMACLAW_HOME: ghome },
+        encoding: "utf8",
+        timeout: 240000,
+      },
+    );
+    const jsonLine = (run.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .reverse()
+      .find((line) => line.startsWith("{") && line.endsWith("}"));
+    if (!jsonLine) fail(`auto-config ${args[0]} gave no result: ${run.stderr}`);
+    return JSON.parse(jsonLine);
+  };
+  const setResult = autoCli([
+    "--set-auto",
+    JSON.stringify({
+      enabled: true,
+      routines: [
+        {
+          id: "e2e-proof",
+          name: "E2E proof",
+          prompt: `Write a one-line friendly note to the household that contains exactly the word ${AUTO_WORD}.`,
+          // No scheduled days: run-now only — the app's live scheduler
+          // must never see this routine as due during the test.
+          schedule: { days: [], time: "12:00" },
+          enabled: true,
+        },
+      ],
+    }),
+  ]);
+  if (!setResult.ok) fail(`auto --set-auto failed: ${setResult.error}`);
+  const runResult = autoCli(["--run-now", "e2e-proof"]);
+  if (!runResult.ok || !runResult.posted)
+    fail(`auto run-now failed: ${JSON.stringify(runResult).slice(0, 200)}`);
+  if (!runResult.message.includes(AUTO_WORD))
+    fail(`auto note missing proof word: "${runResult.message}"`);
+
+  let autoSeen = false;
+  for (let attempt = 0; attempt < 5 && !autoSeen; attempt++) {
+    autoSeen = await web
+      .waitForFunction(
+        (word) => document.body.innerText.includes(word),
+        AUTO_WORD,
+        { timeout: 15000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (!autoSeen) {
+      await web.reload();
+      await web.waitForTimeout(3000);
+    }
+  }
+  if (!autoSeen) fail("auto-mode note never appeared in chat");
+  await web.screenshot({ path: path.join(artifactDir, "live-09-auto-note-in-chat.png") });
+
+  console.log(
+    `LIVE E2E PASS — deep proof ${PROOF_WORD}, auto proof ${AUTO_WORD}, shots in ${artifactDir}`,
+  );
 } catch (err) {
   try {
     await web.screenshot({ path: path.join(artifactDir, "live-FAIL-web.png") });

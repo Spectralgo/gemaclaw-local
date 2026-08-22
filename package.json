@@ -14,6 +14,7 @@
     "dev": "tsx watch server/main.ts",
     "setup": "tsx scripts/setup.ts",
     "pair": "tsx scripts/pair.ts",
+    "auto": "tsx scripts/auto-config.ts",
     "doctor": "tsx scripts/doctor.ts",
     "desktop:dev": "electron .",
     "desktop:pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",

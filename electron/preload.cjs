@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld("gemaclaw", {
   pair: (fields) => ipcRenderer.invoke("gemaclaw:pair", fields),
   pendingPrefill: () => ipcRenderer.invoke("gemaclaw:pending-prefill"),
   doctor: () => ipcRenderer.invoke("gemaclaw:doctor"),
+  autoGet: () => ipcRenderer.invoke("gemaclaw:auto-get"),
+  autoEnable: (enabled) => ipcRenderer.invoke("gemaclaw:auto-enable", enabled),
+  autoToggleRoutine: (id) =>
+    ipcRenderer.invoke("gemaclaw:auto-toggle-routine", id),
+  autoRunNow: (id) => ipcRenderer.invoke("gemaclaw:auto-run-now", id),
   openConfig: () => ipcRenderer.invoke("gemaclaw:open-config"),
   defaultDeviceName: () => ipcRenderer.invoke("gemaclaw:default-device-name"),
   onStatus: (handler) =>
